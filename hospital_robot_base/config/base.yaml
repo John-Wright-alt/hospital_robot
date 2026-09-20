@@ -1,0 +1,68 @@
+# =============================================================================
+# base.yaml  --  settings for the real robot base (Phase 6)
+# Every number marked MEASURE must come from YOUR hardware, not from this file.
+# =============================================================================
+
+pico_bridge:
+  ros__parameters:
+    port: /dev/pico              # udev symlink from Phase 5 (/tmp/pico = fake_pico)
+    baud: 115200
+
+    # --- Geometry --------------------------------------------------------------
+    # RADIUS (half the diameter), metres. 0.072 = your URDF's wheel_radius
+    # (a wheel 144 mm across). Your roadmap says "72 mm wheels" - MEASURE the
+    # tyre: if it is 72 mm ACROSS, this must be 0.036. Keep the URDF equal to it.
+    wheel_radius: 0.072
+
+    # Centre of left tyre to centre of right tyre. URDF: 0.35 - 0.09 = 0.260.
+    # Re-check on the real chassis (guide Part 9.6 calibrates it exactly).
+    wheel_separation: 0.26
+
+    # Encoder counts per ONE turn of the WHEEL = 4096 x GEAR_RATIO (3.75).
+    # Confirmed by your firmware's 'i' report. The bridge checks it on connect.
+    ticks_per_wheel_rev: 15360.0
+
+    # = MAX_WHEEL_SPEED in your config.h. The bridge checks it on connect.
+    max_wheel_speed: 9.0
+
+    # --- Behaviour -------------------------------------------------------------
+    cmd_timeout: 0.6             # s without /cmd_vel -> send zero speed
+    send_rate: 50.0              # Hz, 'v' lines to the Pico
+    use_stamped: true            # Jazzy standard: /cmd_vel is TwistStamped
+    publish_tf: true             # false when the EKF publishes odom->base instead
+    disarm_on_exit: true         # send 'a 0' when the node is stopped
+    echo_pico_text: true         # show the Pico's '#' messages in the log
+
+    # --- Names: checked against your robot.urdf.xacro --------------------------
+    odom_frame: odom
+    base_frame: base_footprint
+    left_wheel_joint: left_wheel_joint
+    right_wheel_joint: right_wheel_joint
+
+joint_state_publisher:
+  ros__parameters:
+    # Merges the wheel angles from the bridge with every other joint in the
+    # URDF (e.g. the lift column, held at 0 until Phase 8) into /joint_states.
+    source_list: [wheel_states]
+    rate: 30
+
+ldlidar:
+  ros__parameters:
+    product_name: LDLiDAR_LD06
+    topic_name: scan
+    frame_id: lidar_link         # MUST match the LiDAR link name in your URDF
+    port_name: /dev/lidar        # udev symlink to /dev/ttyAMA0 (guide Part 4.2)
+    port_baudrate: 230400
+    laser_scan_dir: true         # true = counter-clockwise, the ROS standard
+    enable_angle_crop_func: false
+    angle_crop_min: 135.0        # only used if cropping is enabled
+    angle_crop_max: 225.0
+
+mpu6050:
+  ros__parameters:
+    i2c_bus: 1
+    address: 0x68
+    rate: 100.0
+    frame_id: imu_link           # must match your URDF
+    calibration_seconds: 2.0
+    gyro_z_sign: 1.0             # set -1.0 if turning left gives negative z
