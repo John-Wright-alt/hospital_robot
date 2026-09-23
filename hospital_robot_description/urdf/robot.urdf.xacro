@@ -62,7 +62,7 @@
   <xacro:property name="lidar_x"      value="0.222025"/>
   <xacro:property name="lidar_y"      value="0.209025"/>
   <xacro:property name="lidar_z"      value="0.3209"/>
-  <xacro:property name="lidar_yaw"    value="0.0"/>
+  <xacro:property name="lidar_yaw"    value="-1.5708"/>
   <xacro:property name="lidar_radius" value="0.038"/>
   <xacro:property name="lidar_height" value="0.04"/>
   <xacro:property name="lidar_mass"   value="0.19"/>       <!-- VERIFY: Parts.md lists 0.042 kg, unusually light for an LD06 -->
