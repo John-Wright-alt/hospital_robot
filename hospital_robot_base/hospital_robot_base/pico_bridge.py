@@ -7,6 +7,10 @@ pico_bridge.py  --  ROS 2 Jazzy node that connects ROS to the Pico W.
     TF odom -> base_footprint
     /wheel_states (sensor_msgs/JointState, merged into /joint_states)
     /pico/status, /pico/battery, /robot_state
+    Head-column lift (Phase 8, wiring rev 2, firmware 1.1.0):
+    /lift/command (std_msgs/String: home | park | stop | goto <mm> [speed])  ──►  "l ..."
+    /lift/state   (std_msgs/String: the raw 'l' status line from the Pico)
+    /column_states (sensor_msgs/JointState, merged into /joint_states, once homed)
 
 Services:
     /pico_bridge/arm           std_srvs/SetBool   true = arm, false = disarm
@@ -39,7 +43,8 @@ from tf2_ros import TransformBroadcaster
 import serial
 
 from hospital_robot_base.pico_protocol import (
-    EncoderMsg, StatusMsg, parse_line, status_summary, status_text,
+    EncoderMsg, StatusMsg, LiftMsg, lift_text, lift_command_line,
+    parse_line, status_summary, status_text,
     body_to_wheels, wheels_to_body, DiffDriveOdometry,
     micros_delta, yaw_to_quaternion, TickScaleChecker,
 )
@@ -68,6 +73,8 @@ class PicoBridge(Node):
         self.right_joint = p('right_wheel_joint', 'right_wheel_joint').value
         self.disarm_on_exit = p('disarm_on_exit', True).value
         self.echo_pico_text = p('echo_pico_text', True).value
+        self.column_joint = p('column_joint', 'column_joint').value   # Phase 8 lift
+        self.last_lift_key = None
 
         # --------------- odometry state -------------------------------------
         self.odom = DiffDriveOdometry(self.wheel_radius, self.wheel_separation,
@@ -101,6 +108,8 @@ class PicoBridge(Node):
         self.status_pub = self.create_publisher(String, 'pico/status', 10)
         self.state_pub = self.create_publisher(String, 'robot_state', 10)
         self.batt_pub = self.create_publisher(BatteryState, 'pico/battery', 10)
+        self.lift_pub = self.create_publisher(String, 'lift/state', 10)
+        self.column_pub = self.create_publisher(JointState, 'column_states', 10)
         self.tf_broadcaster = TransformBroadcaster(self) if self.publish_tf else None
 
         # --------------- subscriber -----------------------------------------
@@ -111,6 +120,7 @@ class PicoBridge(Node):
                                      lambda m: self.on_cmd(m.twist), qos)
         else:
             self.create_subscription(Twist, 'cmd_vel', self.on_cmd, qos)
+        self.create_subscription(String, 'lift/command', self.on_lift_cmd, 10)
 
         # --------------- services -------------------------------------------
         self.create_service(SetBool, '~/arm', self.on_arm)
@@ -200,6 +210,14 @@ class PicoBridge(Node):
                 self.was_commanding = False
         self.write(f'v {left:.3f} {right:.3f}')
 
+    def on_lift_cmd(self, msg):
+        line = lift_command_line(msg.data)
+        if line is None:
+            self.get_logger().warn(f"Ignoring lift command '{msg.data}'. Use: home | park | "
+                                   "stop | info | goto <mm> [speed]")
+            return
+        self.write(line)
+
     def on_arm(self, request, response):
         if request.data:
             self.target_l = self.target_r = 0.0     # never arm into a moving command
@@ -247,6 +265,8 @@ class PicoBridge(Node):
                 self.handle_encoder(msg)
             elif isinstance(msg, StatusMsg):
                 self.handle_status(msg)
+            elif isinstance(msg, LiftMsg):
+                self.handle_lift(msg, line.strip())
             elif isinstance(msg, tuple):
                 self.handle_text(msg[1])
 
@@ -385,6 +405,19 @@ class PicoBridge(Node):
                     f'max_wheel_speed is {self.max_wheel_speed} in base.yaml but '
                     f'{fw_max} in the firmware. Make them equal.')
 
+    def handle_lift(self, msg: LiftMsg, raw: str):
+        self.lift_pub.publish(String(data=raw))
+        key = (msg.state, msg.homed, msg.fault)
+        if key != self.last_lift_key:
+            self.get_logger().info(f'Lift: {lift_text(msg)}')
+            self.last_lift_key = key
+        if msg.homed:                      # height is only meaningful once homed
+            js = JointState()
+            js.header.stamp = self.get_clock().now().to_msg()
+            js.name = [self.column_joint]
+            js.position = [msg.pos_mm / 1000.0]
+            self.column_pub.publish(js)
+
     def handle_status(self, msg: StatusMsg):
         text = status_text(msg)
         self.status_pub.publish(String(data=text))
@@ -421,6 +454,7 @@ class PicoBridge(Node):
         """Called on Ctrl+C: stop the wheels, optionally disarm."""
         if self.ser is not None:
             self.write('v 0 0')
+            self.write('l s')              # stop the lift too
             if self.disarm_on_exit:
                 self.write('a 0')
             time.sleep(0.05)
