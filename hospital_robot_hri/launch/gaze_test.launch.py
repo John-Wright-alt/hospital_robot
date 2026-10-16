@@ -59,6 +59,7 @@ def generate_launch_description():
 
         Node(package='ldlidar_stl_ros2', executable='ldlidar_stl_ros2_node',
              name='ldlidar', output='screen', parameters=[base_params],
+             respawn=True, respawn_delay=3.0,
              condition=IfCondition(LaunchConfiguration('use_lidar'))),
 
         Node(package='hospital_robot_base', executable='lidar_gaze',
