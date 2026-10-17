@@ -1,0 +1,76 @@
+# =============================================================================
+# speech.yaml  --  settings for hri_speech (the speaker) and audio_tool
+# Decimal numbers WITH a decimal point (1.0, not 1).
+# Values marked INITIAL are starting points; the guide says how to check them.
+# =============================================================================
+hri_speech:
+  ros__parameters:
+    # ---------------------------------------------------------------- audio out
+    # Pi 4 3.5 mm jack -> PAM8403 -> speaker (wiring sheet). Check the card name
+    # with `aplay -l` (guide step S1). "plughw" converts sample rates for us.
+    alsa_device: "plughw:CARD=Headphones,DEV=0"
+    volume: 0.8                  # 0..1 software volume. Change live:
+                                 #   ros2 param set /hri_speech volume 0.5
+    output_channels: 2           # stereo: same sound on L and R (speaker is on L only)
+    lead_silence_ms: 60.0        # stops the first syllable being clipped
+
+    # ---------------------------------------------------------------- voice
+    voice: "en_GB-cori-medium"   # Piper voice (UK English, female, public-domain data)
+    voice_dir: "~/piper-voices"
+    piper_python: "~/piper-venv/bin/python3"
+    length_scale: 1.1            # > 1 = slower. 1.1 = 10 % slower, calmer for patients
+    sentence_silence: 0.25       # pause between sentences, s
+                                 # (Anna's wake-up lines use their own, slower values:
+                                 #  see length_scale / sentence_silence in phrases.yaml)
+    cache_dir: "~/.local/share/hospital_robot_hri/speech_cache"
+    prerender_on_start: true     # render missing library sentences in the background
+    espeak_voice: "en-gb+f3"     # fallback voice (robotic, but instant)
+    espeak_speed: 150            # words per minute
+
+    # ---------------------------------------------------------------- personality
+    phrases_file: ""             # "" = config/phrases.yaml in this package
+    humour_chance: 0.25          # 0 = never playful, 1 = always (chatter/info only)
+    quiet_start_hour: -1         # e.g. 22 and 6 = quieter, no jokes 22:00-05:59. -1 = off
+    quiet_end_hour: -1
+    quiet_volume_scale: 0.6
+    say_startup: true
+    say_shutdown: true
+
+    # ---------------------------------------------------------------- inputs
+    odom_topic: "odom"                 # nav_msgs/Odometry from pico_bridge (or the EKF)
+    robot_state_topic: "robot_state"   # std_msgs/String from pico_bridge
+    pico_status_topic: "pico/status"   # std_msgs/String from pico_bridge
+    gaze_topic: "hri/gaze/status"      # std_msgs/String (JSON) from lidar_gaze
+    expression_topic: "hri/expression" # std_msgs/String
+    simulated: false                   # true only with simulate_robot (set by the launch file)
+
+    # ---------------------------------------------------------------- motion (INITIAL)
+    v_on: 0.03                   # m/s
+    v_off: 0.015
+    w_on: 0.15                   # rad/s
+    w_off: 0.08
+    start_s: 0.25
+    stop_s: 1.0
+    odom_stale_s: 0.5
+    restart_quiet_s: 10.0        # moving again within 10 s of stopping: chime only
+    cue_interval_s: 6.0          # soft tick while moving (0 = off)
+    reminder_interval_s: 45.0    # spoken "robot passing" while moving (0 = off)
+    journey_quiet_s: 15.0        # after 'journey_start', moving_start is a chime only
+
+    # ---------------------------------------------------------------- repeats
+    state_timeout_s: 3.0         # /robot_state silent this long -> "lost contact"
+    fault_repeat_s: 60.0         # repeat fault / lost contact while it lasts
+    assistance_repeat_s: 30.0
+    battery_repeat_s: 300.0
+
+    # ---------------------------------------------------------------- greeting (INITIAL)
+    greet_enabled: false         # off: Anna sleeps until someone taps the screen
+    greet_range_m: 1.2
+    greet_dwell_s: 2.0
+    greet_cooldown_s: 90.0
+
+    # ---------------------------------------------------------------- logging
+    # One line per message: time, event, priority, result, engine, latency.
+    # Free text from /hri/speech/say is NOT written (no patient information).
+    log_csv: "~/.local/share/hospital_robot_hri/speech_log.csv"   # "" = off
+    status_rate: 5.0             # Hz, /hri/speech/status

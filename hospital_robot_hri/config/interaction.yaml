@@ -1,0 +1,24 @@
+# =============================================================================
+# interaction.yaml  --  settings for hri_interaction (Anna's wake-up flow)
+# Decimal numbers WITH a decimal point (1.0, not 1).
+# =============================================================================
+hri_interaction:
+  ros__parameters:
+    # Phase 8 interfaces (hospital_robot_base: head_column node + pico_bridge).
+    # Check them with:  ros2 topic list | grep -E "head_column|lift"
+    head_state_topic: "head_column/state"
+    head_command_topic: "head_column/command"
+    lift_state_topic: "lift/state"
+
+    adjust_enabled: true       # false = never move the column (screen + voice only)
+    settle_s: 1.5              # face tracked AND lift still this long = height found
+    max_track_s: 10.0          # tracking this long without settling: hold anyway
+    adjust_timeout_s: 30.0     # no face in this time: hold where it is, say so
+    menu_timeout_s: 60.0       # nobody chooses: goodbye, back to sleep (and park)
+    speech_start_timeout_s: 4.0
+    speech_max_s: 25.0
+    park_timeout_s: 40.0       # column not PARKED by then: carry on, log a warning
+    nav_available: false       # Phase 7: true when the Nav2 task layer takes over
+    guiding_s: 20.0            # Phase 9 only: eyes + curiosity this long, then sleep
+    tap_cooldown_s: 1.0
+    ui_rate: 1.0               # Hz, /hri/ui and /hri/expression re-sent

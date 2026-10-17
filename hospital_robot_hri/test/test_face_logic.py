@@ -140,3 +140,132 @@ def test_http_server_serves_page_state_and_events():
             urllib.request.urlopen(base + '/../setup.py', timeout=2)
     finally:
         srv.stop()
+
+
+# ------------------------------------------------------------ Phase 9 speech
+def speech(**kw):
+    s = {'speaking': False, 'text': '', 'priority': '', 'motion': 'stopped', 'turn': 0.0,
+         'audio_ok': True, 'simulated': False}
+    s.update(kw)
+    return s
+
+
+def test_without_speech_node_nothing_changes():
+    out = FaceLogic().update(0.0)
+    assert out['caption'] == '' and out['motion'] == 'unknown' and out['speaking'] is False
+    assert out['audio_ok'] is True
+
+
+def test_caption_and_speaking_expression():
+    f = FaceLogic()
+    f.on_speech_status(speech(speaking=True, text='Hello!', priority='chatter'), 0.0)
+    out = f.update(0.1)
+    assert out['caption'] == 'Hello!' and out['expression'] == 'speaking'
+    f.on_speech_status(speech(), 0.5)
+    assert f.update(0.6)['caption'] == ''
+
+
+def test_speaking_does_not_override_assistance():
+    f = FaceLogic()
+    f.set_expression('assistance')
+    f.on_speech_status(speech(speaking=True, text='I need help', priority='warning'), 0.0)
+    out = f.update(0.1)
+    assert out['expression'] == 'assistance' and out['caption'] == 'I need help'
+
+
+def test_stale_speech_status_clears_caption_and_banner():
+    f = FaceLogic()
+    f.on_speech_status(speech(speaking=True, text='Hi', motion='forward'), 0.0)
+    out = f.update(3.0)                           # > speech_timeout_s (2 s)
+    assert out['caption'] == '' and out['motion'] == 'unknown'
+
+
+def test_while_moving_eyes_look_where_robot_turns_not_at_lidar():
+    f = FaceLogic()
+    f.on_gaze_status(lidar(-60.0, tid=5), 0.0)
+    f.on_speech_status(speech(motion='turning', turn=1.0), 0.0)
+    out = f.update(0.1)
+    assert out['gaze']['source'] == 'motion'
+    assert out['gaze']['x'] == pytest.approx(0.8)  # turning to robot's left -> viewer's right
+    assert out['expression'] == 'idle'             # no 'curious' while driving
+    assert 'bearing_deg' not in out
+
+
+def test_motion_gaze_can_be_switched_off():
+    f = FaceLogic(FaceParams(motion_gaze=False))
+    f.on_gaze_status(lidar(30.0), 0.0)
+    f.on_speech_status(speech(motion='forward', turn=0.5), 0.0)
+    assert f.update(0.1)['gaze']['source'] == 'lidar'
+
+
+# ------------------------------------------------------------ Anna's wake-up flow
+def test_ui_defaults_to_plain_eyes_and_times_out():
+    f = FaceLogic()
+    assert f.update(0.0)['ui']['mode'] == 'eyes'
+    f.on_ui({'mode': 'sleep'}, 0.0)
+    assert f.update(1.0)['ui']['mode'] == 'sleep'
+    assert f.update(5.0)['ui']['mode'] == 'eyes'              # hri_interaction gone
+
+
+def test_ui_menu_options_are_cleaned():
+    f = FaceLogic()
+    f.on_ui({'mode': 'menu', 'options': [{'id': 'pharmacy', 'label': 'Pharmacy'}, 'junk']}, 0.0)
+    assert f.update(0.1)['ui']['options'] == [{'id': 'pharmacy', 'label': 'Pharmacy'}]
+    f.on_ui({'mode': 'dance'}, 0.2)                            # unknown mode ignored
+    assert f.update(0.3)['ui']['mode'] == 'menu'
+
+
+def test_searching_expression_exists_and_owns_the_eyes():
+    f = FaceLogic()
+    assert f.set_expression('searching')
+    f.on_gaze_status(lidar(40.0), 0.0)
+    out = f.update(0.1)
+    assert out['expression'] == 'searching' and out['gaze']['source'] == 'none'
+
+
+def post(base, body):
+    req = urllib.request.Request(base + '/touch', data=body, method='POST',
+                                 headers={'Content-Type': 'application/json'})
+    return urllib.request.urlopen(req, timeout=2).status
+
+
+def test_touch_is_forwarded_and_validated():
+    got = []
+    srv = FaceHttpServer(WEB, '127.0.0.1', 0, on_touch=got.append)
+    srv.start()
+    try:
+        base = f'http://127.0.0.1:{srv.port}'
+        assert post(base, b'{"kind": "tap"}') == 204
+        assert post(base, b'{"kind": "choice", "value": "pharmacy"}') == 204
+        for bad in (b'{"kind": "arm"}', b'{"kind": "choice", "value": "../x"}', b'nonsense'):
+            with pytest.raises(urllib.error.HTTPError):
+                post(base, bad)
+        assert got == [{'kind': 'tap'}, {'kind': 'choice', 'value': 'pharmacy'}]
+    finally:
+        srv.stop()
+
+
+def test_touch_disabled_without_callback_and_remote_check():
+    srv = FaceHttpServer(WEB, '127.0.0.1', 0)
+    srv.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError):
+            post(f'http://127.0.0.1:{srv.port}', b'{"kind": "tap"}')
+    finally:
+        srv.stop()
+    assert '192.168.1.20' not in FaceHttpServer.LOCAL and '127.0.0.1' in FaceHttpServer.LOCAL
+
+
+def test_touch_from_another_computer_is_refused(monkeypatch):
+    got = []
+    srv = FaceHttpServer(WEB, '127.0.0.1', 0, on_touch=got.append)
+    monkeypatch.setattr(srv, 'LOCAL', ())                      # pretend 127.0.0.1 is remote
+    srv.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post(f'http://127.0.0.1:{srv.port}', b'{"kind": "tap"}')
+        assert e.value.code == 403 and got == []
+        srv.allow_remote_touch = True                          # testing switch
+        assert post(f'http://127.0.0.1:{srv.port}', b'{"kind": "tap"}') == 204
+    finally:
+        srv.stop()

@@ -47,9 +47,89 @@
   }
   #notice p { margin: 0; font-size: clamp(16px, 3.1vh, 24px); line-height: 1.4; opacity: 0.9; }
 
+  /* Phase 9 speech: "I'm moving" banner (CR6 visual motion indicator, readable at 3 m)
+     and a caption with whatever the robot is saying (for people who can't hear it). */
+  #motion {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 2.4vw;
+    min-height: 16vh; padding: 1.4vh 4vw; box-sizing: border-box;
+    background: var(--sea); color: var(--ink);
+    font-weight: 700; font-size: clamp(24px, 7.2vh, 54px); line-height: 1.1;
+    text-align: center;
+    animation: glow 1.6s ease-in-out infinite;     /* a slow pulse is easier to notice */
+  }
+  #motion[hidden] { display: none; }
+  #motion.reverse { background: var(--amber); animation-name: glow-amber; }
+  @keyframes glow { 0%, 100% { background: #62C6B5; } 50% { background: #8FDCCF; } }
+  @keyframes glow-amber { 0%, 100% { background: #F2A541; } 50% { background: #FFC676; } }
+  @media (prefers-reduced-motion: reduce) { #motion, #motion.reverse { animation: none; } }
+  #motion .chev { flex: none; white-space: nowrap; font-size: 1.15em; letter-spacing: -0.12em; opacity: 0.85; }
+  #motion .chev span { display: inline-block; animation: chev 1.2s infinite; opacity: 0.25; }
+  #motion .chev span:nth-child(2) { animation-delay: 0.2s; }
+  #motion .chev span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes chev { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #motion .chev span { animation: none; opacity: 0.85; } }
+
+  #caption {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 2.2vh 6vw 3vh; box-sizing: border-box;
+    text-align: center;
+    background: rgba(11, 32, 39, 0.86);
+    border-top: 3px solid var(--sea);
+    font-size: clamp(20px, 4.6vh, 34px); line-height: 1.3; font-weight: 500;
+  }
+  #caption[hidden] { display: none; }
+  #caption.warn { border-top-color: var(--amber); background: rgba(58, 36, 8, 0.9); }
+
+  #mute {
+    position: fixed; top: 12px; right: 12px;
+    padding: 5px 10px; border-radius: 4px;
+    background: rgba(11, 32, 39, 0.8); border: 1px solid var(--amber); color: var(--amber);
+    font-size: 14px; font-weight: 600;
+  }
+  #mute[hidden] { display: none; }
+  body.dev #motion, body.dev #caption { right: 290px; }
+  body.dev #mute { right: 302px; }
+
+  /* Anna's wake-up flow (hri_interaction): "tap to wake" prompt and the destination menu */
+  #notice.tap { border-top-color: var(--sea); background: rgba(11, 32, 39, 0.70); }
+  #notice.tap h1 { animation: breathe 3s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #notice.tap h1 { animation: none; } }
+
+  #menu {
+    position: fixed; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 4vh 4vw 17vh; box-sizing: border-box; gap: 3vh;
+    background: rgba(14, 42, 51, 0.96);
+  }
+  #menu[hidden] { display: none; }
+  body.dev #menu { right: 290px; }
+  #menu h1 { margin: 0; font-weight: 600; font-size: clamp(24px, 6vh, 44px); text-align: center; }
+  #menu-options { flex: 1; width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3vw; }
+  #menu-options button, #menu-cancel {
+    font: inherit; cursor: pointer; color: var(--ink); border: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #menu-options button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh;
+    background: var(--pearl); border-radius: 22px; padding: 2vh 1vw;
+    font-size: clamp(22px, 5.4vh, 42px); font-weight: 700; line-height: 1.15;
+    box-shadow: 0 6px 0 #9fbfba;
+  }
+  #menu-options button:active, #menu-options button.chosen {
+    background: var(--sea); box-shadow: 0 2px 0 #2A8C84; transform: translateY(4px);
+  }
+  #menu-options button:disabled:not(.chosen) { opacity: 0.45; }
+  #menu-options svg { width: 15vh; height: 15vh; }
+  #menu-cancel {
+    background: transparent; color: var(--pearl); text-decoration: underline;
+    font-size: clamp(16px, 3.4vh, 26px); padding: 1vh 3vw;
+  }
+
   /* Shown whenever the eyes are driven by test data rather than a sensor. */
   #badge {
-    position: fixed; top: 12px; left: 12px;
+    position: fixed; top: calc(12px + var(--banner-h, 0px)); left: 12px; z-index: 2;
     padding: 6px 12px; border-radius: 4px;
     background: var(--amber); color: var(--ink);
     font-size: 15px; font-weight: 600;
@@ -89,6 +169,17 @@
   <p id="notice-body"></p>
 </div>
 <div id="badge" hidden></div>
+<div id="motion" role="status" aria-live="assertive" hidden>
+  <span class="chev" aria-hidden="true"><span>›</span><span>›</span><span>›</span></span>
+  <span id="motion-text"></span>
+</div>
+<div id="caption" aria-live="polite" hidden></div>
+<div id="mute" hidden>Sound off</div>
+<div id="menu" hidden role="dialog" aria-label="Choose a destination">
+  <h1>Where would you like to go?</h1>
+  <div id="menu-options"></div>
+  <button id="menu-cancel">No thanks</button>
+</div>
 
 <aside id="dev" hidden aria-label="Test panel">
   <h2>Test panel</h2>
@@ -105,6 +196,15 @@
     <button data-gaze="centre">Centre</button>
     <button data-gaze="sweep">Sweep</button>
   </div>
+  <h2>Speech and motion display</h2>
+  <p class="note">Shows the banner / caption on this screen only (readability test).</p>
+  <div class="grid">
+    <button data-motion="forward">Moving</button>
+    <button data-motion="reverse">Reversing</button>
+    <button data-motion="turning">Turning</button>
+    <button id="test-caption" aria-pressed="false">Caption</button>
+  </div>
+  <p class="note">Click the eyes to tap (works from this PC only with remote_touch:=true).</p>
   <h2>Other</h2>
   <div class="grid">
     <button id="blink-now">Blink now</button>
@@ -138,6 +238,7 @@ const C = {
 //   pulse  gentle open/close while speaking           dim   1 = full brightness
 const BASE = { open: 1, w: 1, top: 0.10, tilt: 0, bot: 0.06, smile: 0, iris: 1, pupil: 1,
                gx: 0, gy: 0, l: 1, r: 1, rTop: -1, rTilt: -9, warm: 0, pulse: 0, dim: 1, drift: 0 };
+// searching: Anna looking for the person's face while the column rises
 const EXPR = {
   idle:       {},
   curious:    { open: 1.14, w: 1.04, top: 0.0, bot: 0.0, iris: 1.04, pupil: 0.8, gy: -0.06, l: 1.07, r: 0.95 },
@@ -149,13 +250,14 @@ const EXPR = {
   confused:   { top: 0.06, l: 1.07, r: 0.92, rTop: 0.26, rTilt: 0.12, gx: -0.15, gy: -0.12 },
   assistance: { open: 1.06, top: 0.02, tilt: -0.07, bot: 0.04, pupil: 0.95, warm: 1 },
   sleeping:   { open: 0.07, top: 0.0, bot: 0.0, iris: 0.6, dim: 0.5 },
+  searching:  { open: 1.1, w: 1.02, top: 0.02, bot: 0.03, pupil: 0.85, l: 1.03, r: 1.03 },
 };
 const NAMES = Object.keys(EXPR);
 const SACCADES = { idle: 1, waiting: 0.7, listening: 0.35, curious: 0.3 };   // idle glances per expression
 
 // ---------------------------------------------------------------- state
 let live = null, lastMsgAt = -1e9;
-let devExpr = null, devGaze = null;
+let devExpr = null, devGaze = null, devMotion = null, devCaption = false;
 const cur = { ...BASE, ...EXPR.sleeping };           // start asleep until data arrives
 const gaze = { x: 0, y: 0, vx: 0, vy: 0 };
 let idleTarget = { x: 0, y: 0 }, nextSaccade = 0, lastGazeTarget = { x: 0, y: 0 };
@@ -217,7 +319,8 @@ function blinkFactor(t) {
   blinkStart = -1;
   if (doubleBlink) { doubleBlink = false; nextBlink = t + 0.12; }
   else {
-    const slow = currentExpression() === "waiting" ? 1.6 : 1;
+    const ex = currentExpression();
+    const slow = ex === "waiting" ? 1.6 : ex === "searching" ? 0.45 : 1;   // searching: blink often
     nextBlink = t + rand(2.6, 6.0) * slow;
     doubleBlink = Math.random() < 0.15;
   }
@@ -245,6 +348,10 @@ function simulatedGaze(t) {
 function gazeTarget(t, expr, P) {
   const sim = simulatedGaze(t);
   if (sim) return sim;
+  if (expr === "searching") {        // look around, mostly upwards, for the person's face
+    return REDUCED_MOTION ? { x: 0, y: -0.3 }
+      : { x: 0.55 * Math.sin(t * 1.6), y: -0.35 + 0.3 * Math.sin(t * 0.9) };
+  }
   const g = live && connected(t) && live.gaze;
   if (g && g.source !== "none") return { x: g.x, y: g.y };
   // No target: occasional small glances, like a person resting.
@@ -379,13 +486,98 @@ const noticeTitle = document.getElementById("notice-title");
 const noticeBody = document.getElementById("notice-body");
 const badge = document.getElementById("badge");
 const readout = document.getElementById("readout");
-let shownNotice = "";
+const motionBox = document.getElementById("motion");
+const motionText = document.getElementById("motion-text");
+const captionBox = document.getElementById("caption");
+const muteBox = document.getElementById("mute");
+let shownNotice = "", shownMotion = "", shownCaption = "";
+
+const MOTION_TEXT = {
+  forward: "I'm moving — please mind my path",
+  turning: "I'm turning — please mind my path",
+  reverse: "Reversing — mind behind me",
+};
+const TEST_CAPTION = "Excuse me, I'm starting to move. Please mind my path.";
+MOTION_TEXT.adjust = "Adjusting my height — please stand still";
+
+// ---- Anna's menu (hri_interaction /hri/ui) and taps (POST /touch)
+const menuBox = document.getElementById("menu");
+const menuOptions = document.getElementById("menu-options");
+let shownMenu = "", lastTouchAt = -1e9, touchNote = "", touchNoteUntil = 0;
+const ICONS = {        // simple generic pictograms (no fonts or images needed)
+  doctor: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="8" width="48" height="48" rx="12" fill="#62C6B5"/><path d="M27 18h10v9h9v10h-9v9H27v-9h-9V27h9z" fill="#EEF6F3"/></svg>',
+  xray: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="6" width="48" height="52" rx="8" fill="#0B2027"/><g stroke="#EEF6F3" stroke-width="3" stroke-linecap="round" fill="none"><path d="M32 14v36"/><path d="M32 20c-8 0-12 3-14 6M32 20c8 0 12 3 14 6M32 28c-8 0-12 3-14 6M32 28c8 0 12 3 14 6M32 36c-7 0-10 3-12 5M32 36c7 0 10 3 12 5"/></g></svg>',
+  pharmacy: '<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-40 32 32)"><rect x="10" y="22" width="44" height="20" rx="10" fill="#F2A541"/><path d="M32 22h12a10 10 0 0 1 0 20H32z" fill="#62C6B5"/></g></svg>',
+};
+
+function sendTouch(msg) {
+  return fetch("/touch", { method: "POST", headers: { "Content-Type": "application/json" },
+                           body: JSON.stringify(msg) })
+    .then((r) => { if (r.status === 403) { touchNote = "Tap ignored: not the robot's screen (remote_touch)";
+                                           touchNoteUntil = performance.now() / 1000 + 4; } })
+    .catch(() => {});
+}
+
+function setMenu(options) {
+  const key = options ? JSON.stringify(options) : "";
+  if (key === shownMenu) return;
+  shownMenu = key;
+  menuBox.hidden = !options;
+  menuOptions.textContent = "";
+  for (const o of options || []) {
+    const b = document.createElement("button");
+    b.dataset.choice = o.id;
+    b.innerHTML = ICONS[o.id] || "";
+    const span = document.createElement("span");
+    span.textContent = o.label;
+    b.appendChild(span);
+    menuOptions.appendChild(b);
+  }
+}
+menuBox.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  const value = b.dataset.choice || (b.id === "menu-cancel" ? "cancel" : "");
+  if (!value) return;
+  menuBox.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+  b.classList.add("chosen");
+  sendTouch({ kind: "choice", value });
+});
+
+// A tap anywhere on the face (not on the test panel or the menu) wakes Anna.
+document.addEventListener("pointerdown", (ev) => {
+  if (ev.target.closest("#dev") || ev.target.closest("#menu")) return;
+  const t = performance.now() / 1000;
+  const ui = (live && connected(t) && live.ui) || {};
+  if (ui.mode !== "sleep" || t - lastTouchAt < 1.5) return;
+  lastTouchAt = t;
+  blinkNow(t);
+  sendTouch({ kind: "tap" });
+});
+
+function setMotion(kind) {
+  kind = MOTION_TEXT[kind] ? kind : "";
+  if (kind === shownMotion) return;
+  shownMotion = kind;
+  motionBox.hidden = !kind;
+  motionBox.className = kind === "reverse" ? "reverse" : "";
+  motionText.textContent = kind ? MOTION_TEXT[kind] : "";
+  document.documentElement.style.setProperty("--banner-h", kind ? motionBox.offsetHeight + "px" : "0px");
+}
+
+function setCaption(text, level) {
+  const key = text ? level + "|" + text : "";
+  if (key === shownCaption) return;
+  shownCaption = key;
+  captionBox.hidden = !text;
+  captionBox.className = (level === "warning" || level === "critical") ? "warn" : "";
+  captionBox.textContent = text || "";
+}
 
 function setNotice(kind, title, body) {
   if (kind === shownNotice) return;
   shownNotice = kind;
   notice.hidden = !kind;
-  notice.className = kind === "assist" ? "assist" : "";
+  notice.className = kind === "assist" ? "assist" : kind === "tap" ? "tap" : "";
   noticeTitle.textContent = title; noticeBody.textContent = body;
 }
 
@@ -396,14 +588,30 @@ function updateOverlays(t, expr) {
   } else if (expr === "assistance") {
     setNotice("assist", "I need help from a staff member",
       "Please ask a nurse or another staff member to come to me.");
+  } else if (!devExpr && live && live.ui && live.ui.mode === "sleep") {
+    setNotice("tap", "Hello, I'm Anna", "Tap the screen to wake me");
   } else {
     setNotice("", "", "");
   }
 
+  // speech + motion (hri_speech). Nothing shows if hri_speech is not running.
+  const L0 = (live && connected(t)) ? live : {};
+  const ui = L0.ui || { mode: "eyes" };
+  setMotion(devMotion || (MOTION_TEXT[L0.motion] && L0.motion !== "adjust" ? L0.motion
+                          : ui.mode === "adjusting" ? "adjust" : ""));
+  setMenu(ui.mode === "menu" && ui.options && ui.options.length ? ui.options : null);
+  if (shownNotice) setCaption("", "");                    // the notice already says it
+  else if (devCaption) setCaption(TEST_CAPTION, "warning");
+  else setCaption(L0.caption || "", L0.caption_priority || "");
+  muteBox.hidden = L0.audio_ok !== false;
+
   const simLive = live && connected(t) && live.simulated && live.gaze && live.gaze.source !== "none";
   const parts = [];
   if (devGaze || simLive) parts.push("Simulated input");
+  if (L0.speech_simulated) parts.push("Simulated robot");
   if (devExpr) parts.push("Test expression");
+  if (devMotion || devCaption) parts.push("Test display");
+  if (touchNote && t < touchNoteUntil) parts.push(touchNote);
   badge.hidden = parts.length === 0;
   badge.textContent = parts.join(" + ");
 
@@ -418,6 +626,10 @@ function updateOverlays(t, expr) {
       `bearing       ${L.bearing_deg ?? "-"} deg\n` +
       `range         ${L.range_m ?? "-"} m\n` +
       `screen x      ${gaze.x.toFixed(2)}\n` +
+      `motion        ${L.motion ?? "-"}\n` +
+      `speaking      ${L.speaking ? "yes" : "no"}\n` +
+      `sound         ${L.audio_ok === false ? "OFF (see hri_speech log)" : "ok"}\n` +
+      `screen mode   ${L.ui ? L.ui.mode : "-"}\n` +
       `frame rate    ${fps.toFixed(0)} fps\n\n` +
       `+ bearing  = robot's left\n+ screen x = viewer's right`;
   }
@@ -438,6 +650,7 @@ connect();
 // ---------------------------------------------------------------- test panel
 if (DEV) {
   document.body.classList.remove("patient");
+  document.body.classList.add("dev");
   document.getElementById("dev").hidden = false;
   const box = document.getElementById("expr-buttons");
   for (const name of NAMES) {
@@ -450,13 +663,18 @@ if (DEV) {
       b.setAttribute("aria-pressed", String(b.dataset.expr === devExpr)));
     document.querySelectorAll("[data-gaze]").forEach((b) =>
       b.setAttribute("aria-pressed", String(b.dataset.gaze === devGaze)));
+    document.querySelectorAll("[data-motion]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.motion === devMotion)));
+    document.getElementById("test-caption").setAttribute("aria-pressed", String(devCaption));
   };
   document.getElementById("dev").addEventListener("click", (ev) => {
     const b = ev.target.closest("button"); if (!b) return;
     if (b.dataset.expr) devExpr = devExpr === b.dataset.expr ? null : b.dataset.expr;
     if (b.dataset.gaze) devGaze = devGaze === b.dataset.gaze ? null : b.dataset.gaze;
+    if (b.dataset.motion) devMotion = devMotion === b.dataset.motion ? null : b.dataset.motion;
+    if (b.id === "test-caption") devCaption = !devCaption;
     if (b.id === "blink-now") blinkNow(performance.now() / 1000);
-    if (b.id === "back-live") { devExpr = null; devGaze = null; }
+    if (b.id === "back-live") { devExpr = null; devGaze = null; devMotion = null; devCaption = false; }
     refresh();
   });
   refresh();

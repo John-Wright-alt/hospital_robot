@@ -3,15 +3,20 @@ face_http.py  --  tiny web server for the face page. Python standard library
 only (no FastAPI, no internet needed), and NO ROS code, so it can be tested on
 its own.
 
-    GET /            the face page (web/index.html)
-    GET /state       the latest face state as JSON (handy with curl)
-    GET /events      Server-Sent Events: the browser receives every new state
+    GET  /           the face page (web/index.html)
+    GET  /state      the latest face state as JSON (handy with curl)
+    GET  /events     Server-Sent Events: the browser receives every new state
+    POST /touch      a tap on the screen, or a menu choice (Anna's wake-up flow):
+                     {"kind": "tap"}  or  {"kind": "choice", "value": "pharmacy"}
 
-The browser only RECEIVES data. Nothing a browser does on this server can
-command the robot.
+The ONLY things a browser can send are a tap and a menu choice, and by default
+only the robot's own screen (127.0.0.1) may send them. Other computers get
+"403 Forbidden" unless allow_remote_touch is switched on for testing. A tap
+can at most start the wake-up flow; it cannot arm the robot or drive it.
 """
 
 import json
+import re
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,7 +24,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class FaceHttpServer:
 
-    def __init__(self, web_dir: str, host: str = '0.0.0.0', port: int = 8080):
+    LOCAL = ('127.0.0.1', '::1', '::ffff:127.0.0.1')
+
+    def __init__(self, web_dir: str, host: str = '0.0.0.0', port: int = 8080,
+                 on_touch=None, allow_remote_touch: bool = False):
         index = os.path.join(web_dir, 'index.html')
         with open(index, 'rb') as f:              # fail early and clearly if missing
             self._index = f.read()
@@ -29,6 +37,10 @@ class FaceHttpServer:
         self._cond = threading.Condition()
         self._stopping = False
         self.clients = 0
+        self.on_touch = on_touch                 # callable(dict) or None (= POST disabled)
+        self.allow_remote_touch = allow_remote_touch
+        self.touches = 0
+        self.rejected = 0
 
         outer = self
 
@@ -55,6 +67,32 @@ class FaceHttpServer:
                     outer._stream(self)
                 else:
                     self._send(404, 'text/plain', b'not found')
+
+            def do_POST(self):
+                path = self.path.split('?', 1)[0]
+                if path != '/touch' or outer.on_touch is None:
+                    self._send(404, 'text/plain', b'not found')
+                    return
+                if not outer.allow_remote_touch and self.client_address[0] not in outer.LOCAL:
+                    outer.rejected += 1
+                    self._send(403, 'text/plain', b'touch is only accepted from the robot screen')
+                    return
+                try:
+                    length = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    length = -1
+                if not 0 < length <= 512:
+                    self._send(400, 'text/plain', b'bad length')
+                    return
+                touch = outer.parse_touch(self.rfile.read(length))
+                if touch is None:
+                    self._send(400, 'text/plain', b'bad touch message')
+                    return
+                outer.touches += 1
+                try:
+                    outer.on_touch(touch)
+                finally:
+                    self._send(204, 'text/plain', b'')
 
         self._httpd = ThreadingHTTPServer((host, port), Handler)
         self._httpd.daemon_threads = True
@@ -96,6 +134,22 @@ class FaceHttpServer:
         finally:
             with self._cond:
                 self.clients -= 1
+
+    @staticmethod
+    def parse_touch(body: bytes):
+        """Only two well-formed messages are accepted; anything else -> None."""
+        try:
+            d = json.loads(body.decode('utf-8'))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        if not isinstance(d, dict):
+            return None
+        if d.get('kind') == 'tap':
+            return {'kind': 'tap'}
+        v = d.get('value')
+        if d.get('kind') == 'choice' and isinstance(v, str) and re.fullmatch(r'[a-z_]{1,24}', v):
+            return {'kind': 'choice', 'value': v}
+        return None
 
     # ------------------------------------------------------------------
     @property

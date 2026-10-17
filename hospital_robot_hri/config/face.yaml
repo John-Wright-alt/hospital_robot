@@ -11,6 +11,14 @@ hri_face:
 
     gaze_timeout_s: 1.0          # no /hri/gaze/status this long -> eyes go back to neutral
     max_bearing_deg: 90.0        # bearing that moves the pupils fully to one side
-    mirror: false                # flipped 16 Oct after the on-robot test
+    mirror: false                 # robot's left = viewer's right. Only change after test 9.2-T2
     curious_s: 1.5               # length of the "what's that?" reaction to a new object
     curious_cooldown_s: 4.0      # at most one curious reaction per this many seconds
+
+    # --- added for the speaker (Phase 9 speech) ---
+    speech_timeout_s: 2.0        # no /hri/speech/status this long -> no caption, no motion banner
+    motion_gaze: true            # while driving, the eyes look where the robot is turning
+
+    # --- added for Anna's wake-up flow (hri_interaction) ---
+    ui_timeout_s: 3.0            # no /hri/ui this long -> plain eyes
+    allow_remote_touch: false    # true = taps from OTHER computers' browsers are accepted (testing only)

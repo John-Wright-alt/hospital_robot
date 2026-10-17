@@ -2,13 +2,17 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>hospital_robot_hri</name>
-  <version>0.1.0</version>
-  <description>Human-robot interaction for the hospital assistant robot: animated eyes (web page served by hri_face), gaze test tools and launch files (ROS 2 Jazzy)</description>
+  <version>0.3.0</version>
+  <description>Human-robot interaction for the hospital assistant robot: animated eyes (web page served by hri_face), the speaker (hri_speech: announcements and text-to-speech), Anna's wake-up flow (hri_interaction: tap to wake, column adjustment through head_column, destination menu), test tools and launch files (ROS 2 Jazzy)</description>
   <maintainer email="you@example.com">Your Name</maintainer>
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
@@ -17,6 +21,8 @@
   <exec_depend>xacro</exec_depend>
   <exec_depend>hospital_robot_description</exec_depend>
   <exec_depend>hospital_robot_base</exec_depend>
+  <!-- Not ROS packages: install with apt (guide step S2): alsa-utils espeak-ng.
+       Piper TTS lives in its own Python venv (guide step S3). -->
 
   <test_depend>python3-pytest</test_depend>
 
