@@ -45,7 +45,8 @@ from hospital_robot_hri.audio_player import (
 from hospital_robot_hri.speech_logic import (
     PRIORITIES, FlagWatcher, GreetingDetector, GreetParams, MotionAnnounceParams,
     MotionAnnouncer, MotionDetector, MotionParams, Repeater, RobotStateWatcher,
-    SpeechPlanner, SpeechQueue, Utterance, all_jobs, in_quiet_hours, load_library)
+    SpeechPlanner, SpeechQueue, Utterance, all_jobs, in_quiet_hours, load_library,
+    motors_can_drive)
 
 # events that tell people we are about to move: no extra "I'm moving" afterwards
 JOURNEY_EVENTS = ('journey_start',)
@@ -87,6 +88,7 @@ class SpeechNode(Node):
         ap = MotionAnnounceParams(restart_quiet_s=float(dp('restart_quiet_s', 10.0)),
                                   cue_interval_s=float(dp('cue_interval_s', 6.0)),
                                   reminder_interval_s=float(dp('reminder_interval_s', 45.0)))
+        self.mp = mp
         self.journey_quiet_s = float(dp('journey_quiet_s', 15.0))
         gp = GreetParams(enabled=bool(dp('greet_enabled', False)),
                          range_m=float(dp('greet_range_m', 1.2)),
@@ -217,8 +219,20 @@ class SpeechNode(Node):
 
     def on_odom(self, msg: Odometry):
         t = time.monotonic()
+        v, w = msg.twist.twist.linear.x, msg.twist.twist.angular.z
+        state = self.state_watch.state
+        if not motors_can_drive(state):
+            # The motors have no power, so this speed cannot be real driving
+            # (e.g. noisy Pico speed readings while disarmed). Don't announce it,
+            # but keep the problem visible in the log.
+            if abs(v) >= self.mp.v_on or abs(w) >= self.mp.w_on:
+                self.get_logger().warn(
+                    f'/odom says v={v:+.3f} m/s, w={w:+.2f} rad/s while the robot is '
+                    f'{state} (no motor power): ignored. Check pico_bridge odometry.',
+                    throttle_duration_sec=30.0)
+            v, w = 0.0, 0.0
         old = self.motion.state
-        new = self.motion.update(t, msg.twist.twist.linear.x, msg.twist.twist.angular.z)
+        new = self.motion.update(t, v, w)
         if new:
             self._motion_changed(t, old, new)
 

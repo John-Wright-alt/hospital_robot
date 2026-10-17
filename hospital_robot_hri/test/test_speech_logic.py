@@ -15,7 +15,8 @@ from hospital_robot_hri.audio_player import SOUNDS
 from hospital_robot_hri.speech_logic import (
     PRIORITIES, FlagWatcher, GreetingDetector, GreetParams, MotionAnnounceParams,
     MotionAnnouncer, MotionDetector, Repeater, RobotStateWatcher, SpeechPlanner,
-    SpeechQueue, Utterance, all_jobs, all_texts, in_quiet_hours, load_library)
+    SpeechQueue, Utterance, all_jobs, all_texts, in_quiet_hours, load_library,
+    motors_can_drive)
 
 PHRASES = os.path.join(os.path.dirname(__file__), '..', 'config', 'phrases.yaml')
 
@@ -357,3 +358,12 @@ def test_quiet_hours():
     assert not in_quiet_hours(12, 22, 6)
     assert in_quiet_hours(13, 12, 14) and not in_quiet_hours(14, 12, 14)
     assert not in_quiet_hours(23, -1, 6)
+
+
+def test_motors_can_drive_only_false_for_explicit_no_power_states():
+    # no motor power: /odom speed cannot be the robot driving itself
+    for s in ('DISARMED', 'ESTOP', 'FAULT', ' disarmed '):
+        assert not motors_can_drive(s)
+    # powered, or unknown: trust /odom (never hide a real warning)
+    for s in ('ARMED', 'ARMING', 'DISARMING', None, '', 'SOMETHING_NEW'):
+        assert motors_can_drive(s)

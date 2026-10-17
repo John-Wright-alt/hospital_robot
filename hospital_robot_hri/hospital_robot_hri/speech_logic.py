@@ -283,6 +283,20 @@ class MotionParams:
     w_full: float = 0.6      # rad/s that turns the eyes fully to one side
 
 
+# /robot_state words that mean the wheel motors have NO power, so the robot
+# cannot be driving itself, whatever /odom says.
+NO_DRIVE_STATES = ('DISARMED', 'ESTOP', 'FAULT')
+
+
+def motors_can_drive(robot_state) -> bool:
+    """False only when /robot_state explicitly says the motors are off.
+    None (no /robot_state yet, e.g. no pico_bridge) or any other word -> True,
+    so an unexpected state never hides a real 'I'm moving' warning."""
+    if robot_state is None:
+        return True
+    return str(robot_state).strip().upper() not in NO_DRIVE_STATES
+
+
 class MotionDetector:
     """/odom twist -> 'unknown' | 'stopped' | 'forward' | 'reverse' | 'turning'.
     Hysteresis + time filters, so encoder noise and a single bad sample can
