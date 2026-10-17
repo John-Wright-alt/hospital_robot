@@ -72,7 +72,7 @@ head_column:                     # Phase 8 (wiring rev 2): ESP32 camera + Pico l
   ros__parameters:
     esp_port: /dev/headcam       # udev symlink for the FireBeetle (GUIDE_CHANGES Part 9)
     auto_home_on_arm: true       # home the lift as soon as the robot is armed
-    search_after_home: true      # then lift and look for a face
+    search_after_home: false      # then lift and look for a face
     soft_min_mm: 5.0             # = LIFT_SOFT_MIN_MM in lift.h
     soft_max_mm: 300.0           # = LIFT_SOFT_MAX_MM in lift.h
     search_speed: 15.0           # mm/s
