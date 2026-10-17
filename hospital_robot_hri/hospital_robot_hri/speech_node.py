@@ -93,7 +93,7 @@ class SpeechNode(Node):
                          dwell_s=float(dp('greet_dwell_s', 2.0)),
                          cooldown_s=float(dp('greet_cooldown_s', 90.0)))
         self.fault_rep = Repeater(float(dp('fault_repeat_s', 60.0)))
-        self.lost_rep = Repeater(float(dp('fault_repeat_s', 60.0)))
+        self.lost_rep = Repeater(float(self.get_parameter('fault_repeat_s').value))
         self.assist_rep = Repeater(float(dp('assistance_repeat_s', 30.0)))
         self.batt_rep = Repeater(float(dp('battery_repeat_s', 300.0)))
         log_csv = os.path.expanduser(dp('log_csv', '~/.local/share/hospital_robot_hri/speech_log.csv'))
