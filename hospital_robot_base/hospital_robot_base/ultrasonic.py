@@ -65,7 +65,6 @@ class UltrasonicPublisher:
     """
 
     def __init__(self, node):
-        from rclpy.qos import qos_profile_sensor_data
         from sensor_msgs.msg import Range
         self._Range = Range
         self.node = node
@@ -80,7 +79,10 @@ class UltrasonicPublisher:
         self.max_range = float(p('ultrasonic_max_range', 2.0).value)
         if len(topics) != 3 or len(self.frames) != 3:
             raise ValueError('ultrasonic_topics and ultrasonic_frames need 3 entries each')
-        self.pubs = [node.create_publisher(Range, t, qos_profile_sensor_data) for t in topics]
+        # RELIABLE publisher (depth 10): works with BOTH reliable subscribers
+        # (RViz by default) and best-effort ones (Nav2 range layer, collision
+        # monitor). A best-effort publisher was invisible to RViz (19 Oct 2026).
+        self.pubs = [node.create_publisher(Range, t, 10) for t in topics]
         self.count = [0, 0, 0]
         self.stuck = [0, 0, 0]
         self.seen_any = False

@@ -76,6 +76,7 @@ def generate_launch_description():
 
         Node(package='ldlidar_stl_ros2', executable='ldlidar_stl_ros2_node',
              name='ldlidar', output='screen', parameters=[base_params],
+             respawn=True, respawn_delay=3.0,   # LD06 driver can quit at start-up
              condition=IfCondition(use_lidar)),
 
         Node(package='hospital_robot_base', executable='mpu6050_node',
