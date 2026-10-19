@@ -31,6 +31,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from hospital_robot_hri.interaction_logic import InteractionLogic, InteractionParams
+from hospital_robot_hri.nav_flow import NavInteractionLogic, NavParams  # Phase 7
 
 
 class InteractionNode(Node):
@@ -42,7 +43,13 @@ class InteractionNode(Node):
         p = InteractionParams()
         for name, default in vars(InteractionParams()).items():
             setattr(p, name, type(default)(dp(name, default)))
-        self.logic = InteractionLogic(p)
+        nav = NavParams()
+        for name, default in vars(NavParams()).items():
+            setattr(nav, name, type(default)(dp(name, default)))
+        # Phase 7: the Phase 9 flow + the trip (identical to InteractionLogic
+        # while nav_available is false)
+        self.logic = NavInteractionLogic(p, nav)
+        self.logic.mission_seq = int(time.time()) % 100000 * 10   # unique trip ids
         ui_rate = float(dp('ui_rate', 1.0))
 
         self.pub = {
@@ -51,6 +58,8 @@ class InteractionNode(Node):
             'head': self.create_publisher(String, dp('head_command_topic', 'head_column/command'), 10),
             'ui': self.create_publisher(String, 'hri/ui', 10),
             'destination': self.create_publisher(String, 'hri/destination', 10),
+            'mission': self.create_publisher(String, dp('mission_command_topic',
+                                                        'mission/command'), 10),
         }
         self.state_pub = self.create_publisher(String, 'hri/interaction/state', 10)
         self.create_subscription(String, 'hri/touch', self.on_touch, 10)
@@ -59,6 +68,8 @@ class InteractionNode(Node):
                                  self.on_head, 10)
         self.create_subscription(String, dp('lift_state_topic', 'lift/state'), self.on_lift, 10)
         self.create_subscription(String, 'hri/interaction/command', self.on_command, 10)
+        self.create_subscription(String, dp('mission_status_topic', 'mission/status'),
+                                 self.on_mission, 10)               # Phase 7
         self.create_timer(0.1, self.tick)
         self.create_timer(1.0 / max(0.2, ui_rate), self.republish)
 
@@ -76,7 +87,7 @@ class InteractionNode(Node):
                 self.get_logger().info(str(value))
                 continue
             data = json.dumps(value) if isinstance(value, dict) else str(value)
-            if kind in ('head', 'say', 'destination'):
+            if kind in ('head', 'say', 'destination', 'mission'):
                 self.get_logger().info(f'{kind}: {data}')
             self.pub[kind].publish(String(data=data))
             self.last[kind] = data
@@ -123,6 +134,13 @@ class InteractionNode(Node):
     def on_command(self, msg: String):
         self.do(self.logic.on_command(time.monotonic(), msg.data))
 
+    def on_mission(self, msg: String):
+        """Phase 7: /mission/status from hospital_robot_nav's mission node."""
+        try:
+            st = json.loads(msg.data)
+        except (ValueError, TypeError):
+            return
+        self.do(self.logic.on_mission_status(time.monotonic(), st))
     def tick(self):
         self.do(self.logic.tick(time.monotonic()))
 

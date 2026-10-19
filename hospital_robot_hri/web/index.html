@@ -127,6 +127,27 @@
     font-size: clamp(16px, 3.4vh, 26px); padding: 1vh 3vw;
   }
 
+  /* Phase 7 trip (nav_flow): destination bar with a Stop button while driving.
+     The Stop button is a convenience for the person; the E-stop is the safety stop. */
+  #trip {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between; gap: 3vw;
+    min-height: 14vh; padding: 1.6vh 4vw; box-sizing: border-box;
+    background: rgba(11, 32, 39, 0.92); border-top: 3px solid var(--sea);
+  }
+  #trip[hidden] { display: none; }
+  body.dev #trip { right: 290px; }
+  #trip-title { font-size: clamp(20px, 4.6vh, 34px); font-weight: 600; line-height: 1.2; }
+  #trip-stop {
+    flex: none; font: inherit; cursor: pointer; border: 0; border-radius: 18px;
+    min-width: 22vw; min-height: 10vh; padding: 1vh 4vw;
+    background: #D64545; color: #fff; font-size: clamp(24px, 6vh, 46px); font-weight: 800;
+    box-shadow: 0 6px 0 #8E2626; -webkit-tap-highlight-color: transparent;
+  }
+  #trip-stop:active, #trip-stop:disabled { transform: translateY(4px); box-shadow: 0 2px 0 #8E2626; }
+  #trip-stop:disabled { opacity: 0.6; }
+  body.trip #caption { bottom: 14vh; }
+  #menu-cancel[hidden] { display: none; }
   /* Shown whenever the eyes are driven by test data rather than a sensor. */
   #badge {
     position: fixed; top: calc(12px + var(--banner-h, 0px)); left: 12px; z-index: 2;
@@ -175,8 +196,12 @@
 </div>
 <div id="caption" aria-live="polite" hidden></div>
 <div id="mute" hidden>Sound off</div>
+<div id="trip" hidden>
+  <span id="trip-title"></span>
+  <button id="trip-stop" aria-label="Stop the robot">Stop</button>
+</div>
 <div id="menu" hidden role="dialog" aria-label="Choose a destination">
-  <h1>Where would you like to go?</h1>
+  <h1 id="menu-title">Where would you like to go?</h1>
   <div id="menu-options"></div>
   <button id="menu-cancel">No thanks</button>
 </div>
@@ -508,6 +533,12 @@ const ICONS = {        // simple generic pictograms (no fonts or images needed)
   doctor: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="8" width="48" height="48" rx="12" fill="#62C6B5"/><path d="M27 18h10v9h9v10h-9v9H27v-9h-9V27h9z" fill="#EEF6F3"/></svg>',
   xray: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="6" width="48" height="52" rx="8" fill="#0B2027"/><g stroke="#EEF6F3" stroke-width="3" stroke-linecap="round" fill="none"><path d="M32 14v36"/><path d="M32 20c-8 0-12 3-14 6M32 20c8 0 12 3 14 6M32 28c-8 0-12 3-14 6M32 28c8 0 12 3 14 6M32 36c-7 0-10 3-12 5M32 36c7 0 10 3 12 5"/></g></svg>',
   pharmacy: '<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-40 32 32)"><rect x="10" y="22" width="44" height="20" rx="10" fill="#F2A541"/><path d="M32 22h12a10 10 0 0 1 0 20H32z" fill="#62C6B5"/></g></svg>',
+  // Phase 7 trip choices (nav_flow)
+  wait: '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24" fill="#62C6B5"/><path d="M32 18v15l10 6" stroke="#0B2027" stroke-width="5" stroke-linecap="round" fill="none"/></svg>',
+  go_back: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30 32 10l22 20v24H40V40H24v14H10z" fill="#62C6B5"/></svg>',
+  return_with_me: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M30 28 46 14l16 14v22H52V39h-12v11H30z" fill="#62C6B5"/><circle cx="14" cy="18" r="6" fill="#F2A541"/><path d="M6 50V34a8 8 0 0 1 16 0v16z" fill="#F2A541"/></svg>',
+  continue: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 26h24V14l20 18-20 18V38H12z" fill="#62C6B5"/></svg>',
+  retry: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M48 22a20 20 0 1 0 4 14" stroke="#62C6B5" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M40 8l14 2-4 14z" fill="#62C6B5"/></svg>',
 };
 
 function sendTouch(msg) {
@@ -518,11 +549,27 @@ function sendTouch(msg) {
     .catch(() => {});
 }
 
-function setMenu(options) {
-  const key = options ? JSON.stringify(options) : "";
+// Phase 7: setMenu gets the whole /hri/ui menu (options + optional title and
+// cancel label: "" hides the cancel link, missing = "No thanks").
+const MENU_TITLE = "Where would you like to go?", MENU_CANCEL = "No thanks";
+const menuTitle = document.getElementById("menu-title");
+const menuCancel = document.getElementById("menu-cancel");
+let menuUnlock = 0;
+function setMenu(menu) {
+  const options = menu ? menu.options : null;
+  const key = menu ? JSON.stringify([menu.state || "", menu.title || "", menu.cancel, options]) : "";
   if (key === shownMenu) return;
   shownMenu = key;
+  clearTimeout(menuUnlock);
   menuBox.hidden = !options;
+  menuTitle.textContent = (menu && menu.title) || MENU_TITLE;
+  const cancel = menu && typeof menu.cancel === "string" ? menu.cancel : MENU_CANCEL;
+  menuCancel.textContent = cancel;
+  menuCancel.hidden = !cancel;
+  menuCancel.disabled = false;                 // (it stayed disabled after one use before)
+  menuCancel.classList.remove("chosen");
+  menuOptions.style.gridTemplateColumns =
+    `repeat(${Math.max(1, Math.min(3, (options || []).length))}, 1fr)`;
   menuOptions.textContent = "";
   for (const o of options || []) {
     const b = document.createElement("button");
@@ -541,6 +588,10 @@ menuBox.addEventListener("click", (ev) => {
   menuBox.querySelectorAll("button").forEach((x) => { x.disabled = true; });
   b.classList.add("chosen");
   sendTouch({ kind: "choice", value });
+  menuUnlock = setTimeout(() => {          // no reaction: allow another try
+    menuBox.querySelectorAll("button").forEach((x) => {
+      x.disabled = false; x.classList.remove("chosen"); });
+  }, 6000);
 });
 
 // A tap anywhere on the face (not on the test panel or the menu) wakes Anna.
@@ -554,6 +605,27 @@ document.addEventListener("pointerdown", (ev) => {
   sendTouch({ kind: "tap" });
 });
 
+// ---- Phase 7 trip bar: where we are going + Stop (a convenience, NOT the safety stop)
+const tripBox = document.getElementById("trip");
+const tripTitle = document.getElementById("trip-title");
+const tripStop = document.getElementById("trip-stop");
+let shownTrip = null;
+function setTrip(ui) {
+  const show = !!(ui && ui.mode === "eyes" && ui.stop);
+  const title = show ? (ui.title || ui.destination || "") : "";
+  const key = show ? title : null;
+  if (key === shownTrip) return;
+  shownTrip = key;
+  tripBox.hidden = !show;
+  document.body.classList.toggle("trip", show);
+  tripTitle.textContent = title;
+  tripStop.disabled = false;
+}
+tripStop.addEventListener("click", () => {
+  tripStop.disabled = true;
+  sendTouch({ kind: "choice", value: "stop" });
+  setTimeout(() => { tripStop.disabled = false; }, 3000);
+});
 function setMotion(kind) {
   kind = MOTION_TEXT[kind] ? kind : "";
   if (kind === shownMotion) return;
@@ -599,7 +671,8 @@ function updateOverlays(t, expr) {
   const ui = L0.ui || { mode: "eyes" };
   setMotion(devMotion || (MOTION_TEXT[L0.motion] && L0.motion !== "adjust" ? L0.motion
                           : ui.mode === "adjusting" ? "adjust" : ""));
-  setMenu(ui.mode === "menu" && ui.options && ui.options.length ? ui.options : null);
+  setMenu(ui.mode === "menu" && ui.options && ui.options.length ? ui : null);
+  setTrip(ui);                                             // Phase 7
   if (shownNotice) setCaption("", "");                    // the notice already says it
   else if (devCaption) setCaption(TEST_CAPTION, "warning");
   else setCaption(L0.caption || "", L0.caption_priority || "");

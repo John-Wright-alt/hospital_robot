@@ -39,6 +39,7 @@ from sensor_msgs.msg import JointState, BatteryState
 from std_msgs.msg import String
 from std_srvs.srv import SetBool, Trigger
 from tf2_ros import TransformBroadcaster
+from hospital_robot_base.ultrasonic import UltrasonicPublisher  # Phase 7
 
 import serial
 
@@ -73,6 +74,9 @@ class PicoBridge(Node):
         self.right_joint = p('right_wheel_joint', 'right_wheel_joint').value
         self.disarm_on_exit = p('disarm_on_exit', True).value
         self.echo_pico_text = p('echo_pico_text', True).value
+        # Phase 7 (KNOWN_ISSUE_ODOM_FALSE_SPEED): /odom speed from tick
+        # differences, not from the Pico's noisy speed readings.
+        self.twist_from_ticks = p('twist_from_ticks', True).value
         self.column_joint = p('column_joint', 'column_joint').value   # Phase 8 lift
         self.last_lift_key = None
 
@@ -111,6 +115,8 @@ class PicoBridge(Node):
         self.lift_pub = self.create_publisher(String, 'lift/state', 10)
         self.column_pub = self.create_publisher(JointState, 'column_states', 10)
         self.tf_broadcaster = TransformBroadcaster(self) if self.publish_tf else None
+        # Phase 7: 'u <n> <mm>' lines -> /ultrasonic/* (sensor_msgs/Range)
+        self.ultrasonic = UltrasonicPublisher(self)
 
         # --------------- subscriber -----------------------------------------
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE,
@@ -260,6 +266,8 @@ class PicoBridge(Node):
             raw, self.rx_buffer = self.rx_buffer.split(b'\n', 1)
             self.last_rx_time = time.monotonic()
             line = raw.decode('ascii', errors='ignore')
+            if self.ultrasonic.handle_line(line):     # Phase 7: ultrasonic
+                continue
             msg = parse_line(line)
             if isinstance(msg, EncoderMsg):
                 self.handle_encoder(msg)
@@ -294,9 +302,13 @@ class PicoBridge(Node):
         self.wheel_pos_l += d_left
         self.wheel_pos_r += d_right
 
-        # Wheel speeds: prefer the Pico's filtered value, else compute from ticks
-        vel_l = msg.vel_l if msg.vel_l is not None else d_left / dt
-        vel_r = msg.vel_r if msg.vel_r is not None else d_right / dt
+        # Wheel speeds. Phase 7: from the tick differences over the Pico's own
+        # time step (twist_from_ticks, default). The Pico's filtered speed
+        # readings showed up to 0.07 m/s while standing still (17 Oct 2026).
+        if self.twist_from_ticks or msg.vel_l is None or msg.vel_r is None:
+            vel_l, vel_r = d_left / dt, d_right / dt
+        else:
+            vel_l, vel_r = msg.vel_l, msg.vel_r
         v_x, w_z = wheels_to_body(vel_l, vel_r, self.wheel_radius,
                                   self.wheel_separation)
 

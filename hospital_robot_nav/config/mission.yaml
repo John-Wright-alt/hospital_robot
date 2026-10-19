@@ -1,0 +1,20 @@
+# =============================================================================
+# mission.yaml -- parameters of the "mission" node (hospital_robot_nav)
+# Loaded by navigation.launch.py. All speeds are m/s and are sent to Nav2 as
+# an absolute /speed_limit, so they can only LOWER the controller speed
+# (desired_linear_vel 0.25) ... except alone_speed, which is capped by the
+# velocity smoother at 0.35 m/s anyway.
+# =============================================================================
+mission:
+  ros__parameters:
+    waypoints_file: "~/robot_ws/maps/apartment/waypoints.yaml"   # navigation.launch.py sets it from site:=
+    guide_speed: 0.25          # a patient walks behind the robot (roadmap 7.2 start value)
+    alone_speed: 0.35          # returning to reception without a person
+    require_armed: true        # never send a goal unless /robot_state is ARMED
+    require_parked: true       # never send a goal unless the head column is PARKED
+    head_optional: false       # true ONLY for tests without the head column running
+    park_wait_s: 45.0          # how long to wait for the column to park
+    start_timeout_s: 10.0      # Nav2 must accept the goal within this time
+    max_goal_s: 300.0          # give up on one trip after 5 minutes
+    cancel_timeout_s: 5.0
+    state_timeout_s: 3.0       # /robot_state older than this counts as "not armed"

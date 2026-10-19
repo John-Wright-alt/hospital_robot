@@ -42,6 +42,9 @@ def generate_launch_description():
     inter_params = os.path.join(share, 'config', 'interaction.yaml')
     sim_head = LaunchConfiguration('sim_head')
     remote_touch = ParameterValue(LaunchConfiguration('remote_touch'), value_type=bool)
+    # Phase 7: nav:=true -> Anna drives with the mission node (hospital_robot_nav)
+    nav_param = {'nav_available': ParameterValue(LaunchConfiguration('nav'),
+                                                 value_type=bool)}
 
     sim_topics = {'head_state_topic': 'hri/sim/head_state',
                   'head_command_topic': 'hri/sim/head_command',
@@ -55,6 +58,9 @@ def generate_launch_description():
         DeclareLaunchArgument('sim_head', default_value='false',
                               description='use simulate_head instead of the real column'),
         DeclareLaunchArgument('head_scenario', default_value='normal'),
+        DeclareLaunchArgument('nav', default_value='false',
+                              description='true = guide with Nav2 '
+                                          '(navigation.launch.py must run)'),
         DeclareLaunchArgument('remote_touch', default_value='false',
                               description='accept taps from other computers (testing only)'),
 
@@ -67,10 +73,12 @@ def generate_launch_description():
              condition=IfCondition(LaunchConfiguration('use_speech'))),
 
         Node(package='hospital_robot_hri', executable='hri_interaction', name='hri_interaction',
-             output='screen', parameters=[inter_params], condition=UnlessCondition(sim_head)),
+             output='screen', parameters=[inter_params, nav_param],
+             condition=UnlessCondition(sim_head)),
 
         Node(package='hospital_robot_hri', executable='hri_interaction', name='hri_interaction',
-             output='screen', parameters=[inter_params, sim_topics], condition=IfCondition(sim_head)),
+             output='screen', parameters=[inter_params, sim_topics, nav_param],
+             condition=IfCondition(sim_head)),
 
         Node(package='hospital_robot_hri', executable='simulate_head', name='simulate_head',
              output='screen', arguments=[LaunchConfiguration('head_scenario')],

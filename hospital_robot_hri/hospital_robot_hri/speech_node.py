@@ -49,7 +49,7 @@ from hospital_robot_hri.speech_logic import (
     motors_can_drive)
 
 # events that tell people we are about to move: no extra "I'm moving" afterwards
-JOURNEY_EVENTS = ('journey_start',)
+JOURNEY_EVENTS = ('journey_start', 'returning_with_you')   # Phase 7
 
 
 class SpeechNode(Node):

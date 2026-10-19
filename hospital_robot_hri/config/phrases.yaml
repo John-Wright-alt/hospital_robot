@@ -290,7 +290,7 @@ events:
     sound: ok
     cooldown_s: 10.0
     phrases:
-      - "We've arrived. Would you like me to wait for you, or come back later? Please choose on my screen."
+      - "We have arrived. Would you like me to wait here for you, or shall I go back on my own? Please choose on my screen."
 
   returning_to_base:      # (Phase 7)
     priority: info
@@ -326,6 +326,43 @@ events:
     phrases:
       - "I can't reach the destination, so I have stopped. Please call a staff member."
 
+  # ------------------------------------------------------------ navigation flow (Phase 7, nav_flow.py)
+  guide_paused:           # Trigger: Stop pressed on the screen while driving
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "I have stopped. Please choose on my screen what you would like to do."
+
+  waiting_here:           # Trigger: "Wait for me here" pressed at the destination
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "I will wait for you right here. When you are ready, please tap my screen."
+
+  returning_with_you:     # Trigger: "Take me back to reception" pressed
+    priority: info
+    sound: move
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "Let's go back to reception together. Please follow me."
+
+  back_at_base:           # Trigger: back at reception with the person
+    priority: info
+    sound: ok
+    cooldown_s: 0.0
+    length_scale: 1.2
+    phrases:
+      - "We are back at reception. Thank you, and take care."
+
+  nav_not_armed:          # Trigger: a trip failed because the motors are off (not armed / E-stop)
+    priority: warning
+    sound: attention
+    cooldown_s: 10.0
+    phrases:
+      - "My motors are switched off, so I cannot drive. Please ask a staff member to help."
   # ------------------------------------------------------------ test
   speaker_test:           # Trigger: audio_tool / test procedure only
     priority: info

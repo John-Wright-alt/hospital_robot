@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Robot face</title>
+<!--
+  Hospital robot eyes (HRI). Served by the hri_face ROS node.
+    http://robot.local:8080/          patient view
+    http://robot.local:8080/?dev=1    with the test panel (affects THIS screen only)
+  Everything is drawn on one 2D canvas: no libraries, no internet needed.
+  Gaze x/y from the robot are -1..+1 in the VIEWER's frame (x+ = viewer's right).
+-->
+<style>
+  :root {
+    --bg-inner: #18404A;
+    --bg-outer: #0E2A33;
+    --pearl: #EEF6F3;
+    --sea: #62C6B5;
+    --amber: #F2A541;
+    --ink: #0B2027;
+    --font: "Ubuntu", "Noto Sans", "DejaVu Sans", sans-serif;
+  }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg-outer); color: var(--pearl);
+    font-family: var(--font);
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  body.patient { cursor: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* Message band: only for things the patient must read (assistance, not ready). */
+  #notice {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 2.4vh 6vw 3.2vh;
+    text-align: center;
+    background: rgba(11, 32, 39, 0.82);
+    border-top: 3px solid var(--sea);
+  }
+  #notice[hidden] { display: none; }
+  #notice.assist { border-top-color: var(--amber); background: rgba(58, 36, 8, 0.88); }
+  #notice h1 {
+    margin: 0 0 0.6vh; font-weight: 500; letter-spacing: 0.01em;
+    font-size: clamp(22px, 5vh, 38px); line-height: 1.2;
+  }
+  #notice p { margin: 0; font-size: clamp(16px, 3.1vh, 24px); line-height: 1.4; opacity: 0.9; }
+
+  /* Phase 9 speech: "I'm moving" banner (CR6 visual motion indicator, readable at 3 m)
+     and a caption with whatever the robot is saying (for people who can't hear it). */
+  #motion {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 2.4vw;
+    min-height: 16vh; padding: 1.4vh 4vw; box-sizing: border-box;
+    background: var(--sea); color: var(--ink);
+    font-weight: 700; font-size: clamp(24px, 7.2vh, 54px); line-height: 1.1;
+    text-align: center;
+    animation: glow 1.6s ease-in-out infinite;     /* a slow pulse is easier to notice */
+  }
+  #motion[hidden] { display: none; }
+  #motion.reverse { background: var(--amber); animation-name: glow-amber; }
+  @keyframes glow { 0%, 100% { background: #62C6B5; } 50% { background: #8FDCCF; } }
+  @keyframes glow-amber { 0%, 100% { background: #F2A541; } 50% { background: #FFC676; } }
+  @media (prefers-reduced-motion: reduce) { #motion, #motion.reverse { animation: none; } }
+  #motion .chev { flex: none; white-space: nowrap; font-size: 1.15em; letter-spacing: -0.12em; opacity: 0.85; }
+  #motion .chev span { display: inline-block; animation: chev 1.2s infinite; opacity: 0.25; }
+  #motion .chev span:nth-child(2) { animation-delay: 0.2s; }
+  #motion .chev span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes chev { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #motion .chev span { animation: none; opacity: 0.85; } }
+
+  #caption {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 2.2vh 6vw 3vh; box-sizing: border-box;
+    text-align: center;
+    background: rgba(11, 32, 39, 0.86);
+    border-top: 3px solid var(--sea);
+    font-size: clamp(20px, 4.6vh, 34px); line-height: 1.3; font-weight: 500;
+  }
+  #caption[hidden] { display: none; }
+  #caption.warn { border-top-color: var(--amber); background: rgba(58, 36, 8, 0.9); }
+
+  #mute {
+    position: fixed; top: 12px; right: 12px;
+    padding: 5px 10px; border-radius: 4px;
+    background: rgba(11, 32, 39, 0.8); border: 1px solid var(--amber); color: var(--amber);
+    font-size: 14px; font-weight: 600;
+  }
+  #mute[hidden] { display: none; }
+  body.dev #motion, body.dev #caption { right: 290px; }
+  body.dev #mute { right: 302px; }
+
+  /* Anna's wake-up flow (hri_interaction): "tap to wake" prompt and the destination menu */
+  #notice.tap { border-top-color: var(--sea); background: rgba(11, 32, 39, 0.70); }
+  #notice.tap h1 { animation: breathe 3s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #notice.tap h1 { animation: none; } }
+
+  #menu {
+    position: fixed; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 4vh 4vw 17vh; box-sizing: border-box; gap: 3vh;
+    background: rgba(14, 42, 51, 0.96);
+  }
+  #menu[hidden] { display: none; }
+  body.dev #menu { right: 290px; }
+  #menu h1 { margin: 0; font-weight: 600; font-size: clamp(24px, 6vh, 44px); text-align: center; }
+  #menu-options { flex: 1; width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3vw; }
+  #menu-options button, #menu-cancel {
+    font: inherit; cursor: pointer; color: var(--ink); border: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #menu-options button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh;
+    background: var(--pearl); border-radius: 22px; padding: 2vh 1vw;
+    font-size: clamp(22px, 5.4vh, 42px); font-weight: 700; line-height: 1.15;
+    box-shadow: 0 6px 0 #9fbfba;
+  }
+  #menu-options button:active, #menu-options button.chosen {
+    background: var(--sea); box-shadow: 0 2px 0 #2A8C84; transform: translateY(4px);
+  }
+  #menu-options button:disabled:not(.chosen) { opacity: 0.45; }
+  #menu-options svg { width: 15vh; height: 15vh; }
+  #menu-cancel {
+    background: transparent; color: var(--pearl); text-decoration: underline;
+    font-size: clamp(16px, 3.4vh, 26px); padding: 1vh 3vw;
+  }
+
+  /* Shown whenever the eyes are driven by test data rather than a sensor. */
+  #badge {
+    position: fixed; top: calc(12px + var(--banner-h, 0px)); left: 12px; z-index: 2;
+    padding: 6px 12px; border-radius: 4px;
+    background: var(--amber); color: var(--ink);
+    font-size: 15px; font-weight: 600;
+  }
+  #badge[hidden] { display: none; }
+
+  /* Test panel (?dev=1). Deliberately plain and separate from the face. */
+  #dev {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 290px;
+    overflow-y: auto; box-sizing: border-box; padding: 14px;
+    background: rgba(5, 18, 22, 0.92); border-left: 1px solid #2c5560;
+    font-size: 14px; line-height: 1.4;
+  }
+  #dev[hidden] { display: none; }
+  #dev h2 { font-size: 15px; font-weight: 600; margin: 14px 0 6px; }
+  #dev h2:first-child { margin-top: 0; }
+  #dev .note { margin: 0 0 8px; opacity: 0.75; font-size: 13px; }
+  #dev .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #dev button {
+    font: inherit; color: var(--pearl); background: #173a43;
+    border: 1px solid #2c5560; border-radius: 4px; padding: 7px 6px; cursor: pointer;
+  }
+  #dev button:hover { background: #1f4b56; }
+  #dev button:focus-visible { outline: 2px solid var(--sea); outline-offset: 1px; }
+  #dev button[aria-pressed="true"] { background: var(--sea); color: var(--ink); border-color: var(--sea); }
+  #dev pre {
+    margin: 0; padding: 8px; background: #0b1d22; border-radius: 4px;
+    font-size: 12px; white-space: pre-wrap; user-select: text;
+  }
+</style>
+</head>
+<body class="patient">
+<canvas id="face" aria-label="Robot eyes"></canvas>
+
+<div id="notice" role="status" aria-live="polite" hidden>
+  <h1 id="notice-title"></h1>
+  <p id="notice-body"></p>
+</div>
+<div id="badge" hidden></div>
+<div id="motion" role="status" aria-live="assertive" hidden>
+  <span class="chev" aria-hidden="true"><span>›</span><span>›</span><span>›</span></span>
+  <span id="motion-text"></span>
+</div>
+<div id="caption" aria-live="polite" hidden></div>
+<div id="mute" hidden>Sound off</div>
+<div id="menu" hidden role="dialog" aria-label="Choose a destination">
+  <h1>Where would you like to go?</h1>
+  <div id="menu-options"></div>
+  <button id="menu-cancel">No thanks</button>
+</div>
+
+<aside id="dev" hidden aria-label="Test panel">
+  <h2>Test panel</h2>
+  <p class="note">Buttons here change this screen only. They do not command the robot.</p>
+  <h2>Live data</h2>
+  <pre id="readout">waiting for data…</pre>
+  <h2>Expression</h2>
+  <div class="grid" id="expr-buttons"></div>
+  <h2>Simulated gaze</h2>
+  <p class="note">Marked "Simulated input" on screen while active.</p>
+  <div class="grid">
+    <button data-gaze="left">Robot's left</button>
+    <button data-gaze="right">Robot's right</button>
+    <button data-gaze="centre">Centre</button>
+    <button data-gaze="sweep">Sweep</button>
+  </div>
+  <h2>Speech and motion display</h2>
+  <p class="note">Shows the banner / caption on this screen only (readability test).</p>
+  <div class="grid">
+    <button data-motion="forward">Moving</button>
+    <button data-motion="reverse">Reversing</button>
+    <button data-motion="turning">Turning</button>
+    <button id="test-caption" aria-pressed="false">Caption</button>
+  </div>
+  <p class="note">Click the eyes to tap (works from this PC only with remote_touch:=true).</p>
+  <h2>Other</h2>
+  <div class="grid">
+    <button id="blink-now">Blink now</button>
+    <button id="back-live">Back to live data</button>
+  </div>
+</aside>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- settings
+const DEV = new URLSearchParams(location.search).has("dev");
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DISCONNECT_S = 2.5;            // no data this long -> "not connected"
+
+const C = {
+  bgInner: "#18404A", bgOuter: "#0E2A33",
+  pearl: "#EEF6F3", pearlShade: "#CFE2DE",
+  irisLight: "#9BE0D3", iris: "#62C6B5", irisDeep: "#2A8C84",
+  amberLight: "#FFD394", amber: "#F2A541", amberDeep: "#B86E12",
+  pupil: "#0B2027",
+};
+
+// Expression = target values for a handful of numbers. The renderer eases
+// towards them, so every change of expression is a smooth transition.
+//   open   eye height          top   upper-lid drop (fraction of height)
+//   tilt   lid slope (+ = inner corner lower: focused; - = inner raised: soft)
+//   bot    lower-lid rise      smile 0 = straight lower lid, 1 = curved (happy)
+//   iris, pupil  sizes         gx, gy  gaze bias      l, r  per-eye size
+//   rTop, rTilt  right-eye lid override (confused)   warm  0 sea-glass .. 1 amber
+//   pulse  gentle open/close while speaking           dim   1 = full brightness
+const BASE = { open: 1, w: 1, top: 0.10, tilt: 0, bot: 0.06, smile: 0, iris: 1, pupil: 1,
+               gx: 0, gy: 0, l: 1, r: 1, rTop: -1, rTilt: -9, warm: 0, pulse: 0, dim: 1, drift: 0 };
+// searching: Anna looking for the person's face while the column rises
+const EXPR = {
+  idle:       {},
+  curious:    { open: 1.14, w: 1.04, top: 0.0, bot: 0.0, iris: 1.04, pupil: 0.8, gy: -0.06, l: 1.07, r: 0.95 },
+  listening:  { open: 1.05, top: 0.04, tilt: -0.03, bot: 0.04, pupil: 1.12 },
+  speaking:   { open: 1.03, top: 0.05, tilt: -0.03, bot: 0.05, pupil: 1.08, pulse: 1 },
+  thinking:   { open: 0.92, top: 0.20, tilt: 0.05, bot: 0.08, iris: 0.94, pupil: 0.78, gx: 0.42, gy: -0.38, drift: 1 },
+  happy:      { open: 1.0, top: 0.0, tilt: -0.02, bot: 0.52, smile: 1, pupil: 1.1, gy: -0.25 },
+  waiting:    { open: 0.88, top: 0.27, tilt: -0.02, bot: 0.10 },
+  confused:   { top: 0.06, l: 1.07, r: 0.92, rTop: 0.26, rTilt: 0.12, gx: -0.15, gy: -0.12 },
+  assistance: { open: 1.06, top: 0.02, tilt: -0.07, bot: 0.04, pupil: 0.95, warm: 1 },
+  sleeping:   { open: 0.07, top: 0.0, bot: 0.0, iris: 0.6, dim: 0.5 },
+  searching:  { open: 1.1, w: 1.02, top: 0.02, bot: 0.03, pupil: 0.85, l: 1.03, r: 1.03 },
+};
+const NAMES = Object.keys(EXPR);
+const SACCADES = { idle: 1, waiting: 0.7, listening: 0.35, curious: 0.3 };   // idle glances per expression
+
+// ---------------------------------------------------------------- state
+let live = null, lastMsgAt = -1e9;
+let devExpr = null, devGaze = null, devMotion = null, devCaption = false;
+const cur = { ...BASE, ...EXPR.sleeping };           // start asleep until data arrives
+const gaze = { x: 0, y: 0, vx: 0, vy: 0 };
+let idleTarget = { x: 0, y: 0 }, nextSaccade = 0, lastGazeTarget = { x: 0, y: 0 };
+let blinkStart = -1, nextBlink = 1.5, doubleBlink = false;
+let fps = 0, frames = 0, fpsT = 0;
+
+// ---------------------------------------------------------------- canvas
+const canvas = document.getElementById("face");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, FW = 0, unit = 0, bgGrad = null;   // FW = width used by the face
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  FW = DEV && W > 700 ? W - 290 : W;               // keep the eyes clear of the test panel
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  unit = Math.min(FW / 3.3, H / 1.75);
+  bgGrad = ctx.createRadialGradient(FW / 2, H * 0.44, 0, FW / 2, H * 0.44, Math.max(W, H) * 0.75);
+  bgGrad.addColorStop(0, C.bgInner);
+  bgGrad.addColorStop(1, C.bgOuter);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---------------------------------------------------------------- helpers
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+function mix(h1, h2, t) {
+  const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16);
+  const ch = (s) => Math.round(lerp((a >> s) & 255, (b >> s) & 255, t));
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
+// Rounded "pebble" outline: a superellipse, softer than a rectangle,
+// flatter than an ellipse.
+function pebble(cx, cy, w, h, n = 3.0, steps = 48) {
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const c = Math.cos(a), s = Math.sin(a);
+    const x = cx + (w / 2) * Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
+    const y = cy + (h / 2) * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+
+// ---------------------------------------------------------------- blink
+function blinkFactor(t) {
+  if (cur.open < 0.2) return 1;                   // asleep: nothing to blink
+  if (blinkStart < 0 && t >= nextBlink) { blinkStart = t; }
+  if (blinkStart < 0) return 1;
+  const e = (t - blinkStart) * 1000, CLOSE = 75, HOLD = 35, OPEN = 125;
+  if (e < CLOSE) return 1 - e / CLOSE;
+  if (e < CLOSE + HOLD) return 0;
+  if (e < CLOSE + HOLD + OPEN) return (e - CLOSE - HOLD) / OPEN;
+  blinkStart = -1;
+  if (doubleBlink) { doubleBlink = false; nextBlink = t + 0.12; }
+  else {
+    const ex = currentExpression();
+    const slow = ex === "waiting" ? 1.6 : ex === "searching" ? 0.45 : 1;   // searching: blink often
+    nextBlink = t + rand(2.6, 6.0) * slow;
+    doubleBlink = Math.random() < 0.15;
+  }
+  return 1;
+}
+function blinkNow(t) { if (blinkStart < 0) nextBlink = t; }
+
+// ---------------------------------------------------------------- inputs
+function connected(t) { return t - lastMsgAt < DISCONNECT_S; }
+function currentExpression(t = performance.now() / 1000) {
+  if (devExpr) return devExpr;
+  if (!connected(t) || !live) return "sleeping";
+  return NAMES.includes(live.expression) ? live.expression : "idle";
+}
+function simulatedGaze(t) {
+  const left = (live && live.mirror === false) ? -0.75 : 0.75;   // robot's left -> viewer's right
+  switch (devGaze) {
+    case "left": return { x: left, y: 0 };
+    case "right": return { x: -left, y: 0 };
+    case "centre": return { x: 0, y: 0 };
+    case "sweep": return { x: 0.8 * Math.sin(t * Math.PI * 2 / 8), y: 0 };
+  }
+  return null;
+}
+function gazeTarget(t, expr, P) {
+  const sim = simulatedGaze(t);
+  if (sim) return sim;
+  if (expr === "searching") {        // look around, mostly upwards, for the person's face
+    return REDUCED_MOTION ? { x: 0, y: -0.3 }
+      : { x: 0.55 * Math.sin(t * 1.6), y: -0.35 + 0.3 * Math.sin(t * 0.9) };
+  }
+  const g = live && connected(t) && live.gaze;
+  if (g && g.source !== "none") return { x: g.x, y: g.y };
+  // No target: occasional small glances, like a person resting.
+  const amount = REDUCED_MOTION ? 0 : (SACCADES[expr] || 0);
+  if (amount > 0 && t >= nextSaccade) {
+    nextSaccade = t + rand(1.8, 4.5);
+    idleTarget = Math.random() < 0.4 ? { x: 0, y: 0 }
+      : { x: rand(-0.28, 0.28) * amount, y: rand(-0.14, 0.12) * amount };
+  }
+  if (amount === 0) idleTarget = { x: 0, y: 0 };
+  return idleTarget;
+}
+
+// ---------------------------------------------------------------- drawing
+function drawEye(cx, cy, side, P, blink, t) {
+  // side: -1 = eye on the viewer's left, +1 = viewer's right
+  const size = side < 0 ? P.l : P.r;
+  const pulse = 1 + 0.045 * P.pulse * Math.sin(t * Math.PI * 2 * 2.3);
+  const w = unit * 1.0 * P.w * size;
+  const hOpen = unit * 0.78 * P.open * size * pulse;     // without the blink
+  const h = Math.max(hOpen * (0.06 + 0.94 * blink), 1.5);
+  const ey = cy + (hOpen - h) * 0.18;                     // lids meet a little below centre
+
+  ctx.save();
+  pebble(cx, ey, w, h); ctx.clip();
+
+  // white of the eye, slightly shaded towards the edges
+  const sclera = ctx.createRadialGradient(cx, ey - h * 0.15, 0, cx, ey, Math.max(w, h) * 0.62);
+  sclera.addColorStop(0, C.pearl); sclera.addColorStop(1, C.pearlShade);
+  ctx.fillStyle = sclera; ctx.fillRect(cx - w, ey - h, w * 2, h * 2);
+
+  // iris + pupil
+  const rI = unit * 0.78 * 0.34 * P.iris * size;
+  const ix = cx + clamp(gaze.x + P.gx + P.drift * 0.12 * Math.sin(t * 0.9), -1, 1) * (w / 2 - rI * 0.85);
+  const iy = cy + clamp(gaze.y + P.gy, -1, 1) * Math.max(hOpen / 2 - rI * 0.55, 0);
+  const ig = ctx.createRadialGradient(ix - rI * 0.25, iy - rI * 0.3, rI * 0.1, ix, iy, rI);
+  ig.addColorStop(0, mix(C.irisLight, C.amberLight, P.warm));
+  ig.addColorStop(0.55, mix(C.iris, C.amber, P.warm));
+  ig.addColorStop(1, mix(C.irisDeep, C.amberDeep, P.warm));
+  ctx.fillStyle = ig;
+  ctx.beginPath(); ctx.arc(ix, iy, rI, 0, Math.PI * 2); ctx.fill();
+
+  // fine radial texture that turns very slowly: reads as a lens, not a cartoon
+  ctx.strokeStyle = "rgba(11,32,39,0.10)"; ctx.lineWidth = Math.max(1, rI * 0.02);
+  const spin = t * (P.drift ? 0.35 : 0.05);
+  ctx.beginPath();
+  for (let k = 0; k < 18; k++) {
+    const a = spin + (k / 18) * Math.PI * 2;
+    ctx.moveTo(ix + Math.cos(a) * rI * 0.5, iy + Math.sin(a) * rI * 0.5);
+    ctx.lineTo(ix + Math.cos(a) * rI * 0.93, iy + Math.sin(a) * rI * 0.93);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = C.pupil;
+  ctx.beginPath(); ctx.arc(ix, iy, rI * 0.42 * P.pupil, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(238,246,243,0.92)";
+  ctx.beginPath(); ctx.arc(ix - rI * 0.34, iy - rI * 0.38, rI * 0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(238,246,243,0.55)";
+  ctx.beginPath(); ctx.arc(ix + rI * 0.22, iy + rI * 0.3, rI * 0.06, 0, Math.PI * 2); ctx.fill();
+
+  // lids: drawn in the background colour (same gradient, so no seams)
+  const top = (side > 0 && P.rTop >= 0) ? P.rTop : P.top;
+  const tilt = (side > 0 && P.rTilt > -9) ? P.rTilt : P.tilt;
+  const yTop = (x) => ey - h / 2 + top * h + tilt * h * (-side * (x - cx) / (w / 2));
+  ctx.restore();
+
+  // Lids are drawn in the background colour OUTSIDE the clip (a clipped edge
+  // leaves a faint outline). They stay within this eye's width (xs).
+  const xs = w * 0.53;
+  // upper lid: gently arched (higher in the middle), like a real lid
+  ctx.fillStyle = bgGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx - xs, ey - h * 1.5); ctx.lineTo(cx + xs, ey - h * 1.5);
+  ctx.lineTo(cx + xs, yTop(cx + xs));
+  ctx.quadraticCurveTo(cx, yTop(cx) - 0.14 * h, cx - xs, yTop(cx - xs));
+  ctx.closePath(); ctx.fill();
+
+  // lower lid: straight, or (happy) an arch that pushes the eye into a crescent
+  const bottom = ey + h / 2;
+  const edge = bottom - P.bot * h * (1 - P.smile) - 0.10 * h * P.smile;
+  const apex = bottom - P.bot * h;
+  const ctrl = lerp(edge, (apex - 0.25 * edge) / 0.75, P.smile);
+  ctx.beginPath();
+  ctx.moveTo(cx - xs, ey + h * 1.5); ctx.lineTo(cx - xs, edge);
+  ctx.lineTo(cx - xs, edge);
+  ctx.bezierCurveTo(cx - w * 0.3, ctrl, cx + w * 0.3, ctrl, cx + xs, edge);
+  ctx.lineTo(cx + xs, edge); ctx.lineTo(cx + xs, ey + h * 1.5);
+  ctx.closePath(); ctx.fill();
+}
+
+// ---------------------------------------------------------------- main loop
+let lastT = performance.now() / 1000;
+function frame(nowMs) {
+  const t = nowMs / 1000, dt = Math.min(0.1, t - lastT); lastT = t;
+
+  const expr = currentExpression(t);
+  const target = { ...BASE, ...EXPR[expr] };
+  const k = 1 - Math.exp(-dt / 0.14);                    // ~140 ms expression transitions
+  for (const key in target) cur[key] = lerp(cur[key], target[key], k);
+  // discrete per-eye overrides snap, they are not meant to be blended
+  cur.rTop = target.rTop; cur.rTilt = target.rTilt;
+
+  // gaze: critically-damped spring (smooth, no overshoot, no flicker)
+  const g = gazeTarget(t, expr, cur);
+  if (Math.abs(g.x - lastGazeTarget.x) > 0.5 && Math.random() < 0.35) blinkNow(t);
+  lastGazeTarget = g;
+  const stiff = 55, damp = 2 * Math.sqrt(stiff);
+  gaze.vx += (stiff * (g.x - gaze.x) - damp * gaze.vx) * dt;
+  gaze.vy += (stiff * (g.y - gaze.y) - damp * gaze.vy) * dt;
+  gaze.x += gaze.vx * dt; gaze.y += gaze.vy * dt;
+
+  // draw
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+  const breathe = cur.dim < 0.8 && !REDUCED_MOTION ? 0.85 + 0.15 * Math.sin(t * 0.9) : 1;
+  ctx.globalAlpha = clamp(cur.dim * breathe, 0, 1);
+  const blink = blinkFactor(t);
+  const cy = H * 0.44, gap = unit * 1.32;
+  drawEye(FW / 2 - gap / 2, cy, -1, cur, blink, t);
+  drawEye(FW / 2 + gap / 2, cy, +1, cur, blink, t);
+  ctx.globalAlpha = 1;
+
+  updateOverlays(t, expr);
+  frames++;
+  if (t - fpsT >= 1) { fps = frames / (t - fpsT); frames = 0; fpsT = t; }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------- overlays
+const notice = document.getElementById("notice");
+const noticeTitle = document.getElementById("notice-title");
+const noticeBody = document.getElementById("notice-body");
+const badge = document.getElementById("badge");
+const readout = document.getElementById("readout");
+const motionBox = document.getElementById("motion");
+const motionText = document.getElementById("motion-text");
+const captionBox = document.getElementById("caption");
+const muteBox = document.getElementById("mute");
+let shownNotice = "", shownMotion = "", shownCaption = "";
+
+const MOTION_TEXT = {
+  forward: "I'm moving — please mind my path",
+  turning: "I'm turning — please mind my path",
+  reverse: "Reversing — mind behind me",
+};
+const TEST_CAPTION = "Excuse me, I'm starting to move. Please mind my path.";
+MOTION_TEXT.adjust = "Adjusting my height — please stand still";
+
+// ---- Anna's menu (hri_interaction /hri/ui) and taps (POST /touch)
+const menuBox = document.getElementById("menu");
+const menuOptions = document.getElementById("menu-options");
+let shownMenu = "", lastTouchAt = -1e9, touchNote = "", touchNoteUntil = 0;
+const ICONS = {        // simple generic pictograms (no fonts or images needed)
+  doctor: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="8" width="48" height="48" rx="12" fill="#62C6B5"/><path d="M27 18h10v9h9v10h-9v9H27v-9h-9V27h9z" fill="#EEF6F3"/></svg>',
+  xray: '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="6" width="48" height="52" rx="8" fill="#0B2027"/><g stroke="#EEF6F3" stroke-width="3" stroke-linecap="round" fill="none"><path d="M32 14v36"/><path d="M32 20c-8 0-12 3-14 6M32 20c8 0 12 3 14 6M32 28c-8 0-12 3-14 6M32 28c8 0 12 3 14 6M32 36c-7 0-10 3-12 5M32 36c7 0 10 3 12 5"/></g></svg>',
+  pharmacy: '<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-40 32 32)"><rect x="10" y="22" width="44" height="20" rx="10" fill="#F2A541"/><path d="M32 22h12a10 10 0 0 1 0 20H32z" fill="#62C6B5"/></g></svg>',
+};
+
+function sendTouch(msg) {
+  return fetch("/touch", { method: "POST", headers: { "Content-Type": "application/json" },
+                           body: JSON.stringify(msg) })
+    .then((r) => { if (r.status === 403) { touchNote = "Tap ignored: not the robot's screen (remote_touch)";
+                                           touchNoteUntil = performance.now() / 1000 + 4; } })
+    .catch(() => {});
+}
+
+function setMenu(options) {
+  const key = options ? JSON.stringify(options) : "";
+  if (key === shownMenu) return;
+  shownMenu = key;
+  menuBox.hidden = !options;
+  menuOptions.textContent = "";
+  for (const o of options || []) {
+    const b = document.createElement("button");
+    b.dataset.choice = o.id;
+    b.innerHTML = ICONS[o.id] || "";
+    const span = document.createElement("span");
+    span.textContent = o.label;
+    b.appendChild(span);
+    menuOptions.appendChild(b);
+  }
+}
+menuBox.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  const value = b.dataset.choice || (b.id === "menu-cancel" ? "cancel" : "");
+  if (!value) return;
+  menuBox.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+  b.classList.add("chosen");
+  sendTouch({ kind: "choice", value });
+});
+
+// A tap anywhere on the face (not on the test panel or the menu) wakes Anna.
+document.addEventListener("pointerdown", (ev) => {
+  if (ev.target.closest("#dev") || ev.target.closest("#menu")) return;
+  const t = performance.now() / 1000;
+  const ui = (live && connected(t) && live.ui) || {};
+  if (ui.mode !== "sleep" || t - lastTouchAt < 1.5) return;
+  lastTouchAt = t;
+  blinkNow(t);
+  sendTouch({ kind: "tap" });
+});
+
+function setMotion(kind) {
+  kind = MOTION_TEXT[kind] ? kind : "";
+  if (kind === shownMotion) return;
+  shownMotion = kind;
+  motionBox.hidden = !kind;
+  motionBox.className = kind === "reverse" ? "reverse" : "";
+  motionText.textContent = kind ? MOTION_TEXT[kind] : "";
+  document.documentElement.style.setProperty("--banner-h", kind ? motionBox.offsetHeight + "px" : "0px");
+}
+
+function setCaption(text, level) {
+  const key = text ? level + "|" + text : "";
+  if (key === shownCaption) return;
+  shownCaption = key;
+  captionBox.hidden = !text;
+  captionBox.className = (level === "warning" || level === "critical") ? "warn" : "";
+  captionBox.textContent = text || "";
+}
+
+function setNotice(kind, title, body) {
+  if (kind === shownNotice) return;
+  shownNotice = kind;
+  notice.hidden = !kind;
+  notice.className = kind === "assist" ? "assist" : kind === "tap" ? "tap" : "";
+  noticeTitle.textContent = title; noticeBody.textContent = body;
+}
+
+function updateOverlays(t, expr) {
+  if (!connected(t) && !devExpr) {
+    setNotice("offline", "I'm not ready yet",
+      "The robot software is not running. Please ask a staff member for help.");
+  } else if (expr === "assistance") {
+    setNotice("assist", "I need help from a staff member",
+      "Please ask a nurse or another staff member to come to me.");
+  } else if (!devExpr && live && live.ui && live.ui.mode === "sleep") {
+    setNotice("tap", "Hello, I'm Anna", "Tap the screen to wake me");
+  } else {
+    setNotice("", "", "");
+  }
+
+  // speech + motion (hri_speech). Nothing shows if hri_speech is not running.
+  const L0 = (live && connected(t)) ? live : {};
+  const ui = L0.ui || { mode: "eyes" };
+  setMotion(devMotion || (MOTION_TEXT[L0.motion] && L0.motion !== "adjust" ? L0.motion
+                          : ui.mode === "adjusting" ? "adjust" : ""));
+  setMenu(ui.mode === "menu" && ui.options && ui.options.length ? ui.options : null);
+  if (shownNotice) setCaption("", "");                    // the notice already says it
+  else if (devCaption) setCaption(TEST_CAPTION, "warning");
+  else setCaption(L0.caption || "", L0.caption_priority || "");
+  muteBox.hidden = L0.audio_ok !== false;
+
+  const simLive = live && connected(t) && live.simulated && live.gaze && live.gaze.source !== "none";
+  const parts = [];
+  if (devGaze || simLive) parts.push("Simulated input");
+  if (L0.speech_simulated) parts.push("Simulated robot");
+  if (devExpr) parts.push("Test expression");
+  if (devMotion || devCaption) parts.push("Test display");
+  if (touchNote && t < touchNoteUntil) parts.push(touchNote);
+  badge.hidden = parts.length === 0;
+  badge.textContent = parts.join(" + ");
+
+  if (DEV && Math.floor(t * 4) !== Math.floor((t - 0.02) * 4)) {
+    const L = live || {};
+    readout.textContent =
+      `connected     ${connected(t) ? "yes" : "NO"}\n` +
+      `expression    ${expr}${devExpr ? " (test)" : ""}\n` +
+      `robot asks    ${L.base_expression ?? "-"}\n` +
+      `gaze data     ${L.gaze_data ?? "-"}\n` +
+      `gaze source   ${devGaze ? "test (" + devGaze + ")" : (L.gaze ? L.gaze.source : "-")}\n` +
+      `bearing       ${L.bearing_deg ?? "-"} deg\n` +
+      `range         ${L.range_m ?? "-"} m\n` +
+      `screen x      ${gaze.x.toFixed(2)}\n` +
+      `motion        ${L.motion ?? "-"}\n` +
+      `speaking      ${L.speaking ? "yes" : "no"}\n` +
+      `sound         ${L.audio_ok === false ? "OFF (see hri_speech log)" : "ok"}\n` +
+      `screen mode   ${L.ui ? L.ui.mode : "-"}\n` +
+      `frame rate    ${fps.toFixed(0)} fps\n\n` +
+      `+ bearing  = robot's left\n+ screen x = viewer's right`;
+  }
+}
+
+// ---------------------------------------------------------------- data in
+function connect() {
+  if (!window.EventSource) return;
+  const es = new EventSource("/events");
+  es.onmessage = (ev) => {
+    try { live = JSON.parse(ev.data); lastMsgAt = performance.now() / 1000; }
+    catch (e) { /* ignore a broken message; the next one replaces it */ }
+  };
+  // EventSource reconnects by itself after an error.
+}
+connect();
+
+// ---------------------------------------------------------------- test panel
+if (DEV) {
+  document.body.classList.remove("patient");
+  document.body.classList.add("dev");
+  document.getElementById("dev").hidden = false;
+  const box = document.getElementById("expr-buttons");
+  for (const name of NAMES) {
+    const b = document.createElement("button");
+    b.textContent = name; b.dataset.expr = name; b.setAttribute("aria-pressed", "false");
+    box.appendChild(b);
+  }
+  const refresh = () => {
+    document.querySelectorAll("[data-expr]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.expr === devExpr)));
+    document.querySelectorAll("[data-gaze]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.gaze === devGaze)));
+    document.querySelectorAll("[data-motion]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.motion === devMotion)));
+    document.getElementById("test-caption").setAttribute("aria-pressed", String(devCaption));
+  };
+  document.getElementById("dev").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.expr) devExpr = devExpr === b.dataset.expr ? null : b.dataset.expr;
+    if (b.dataset.gaze) devGaze = devGaze === b.dataset.gaze ? null : b.dataset.gaze;
+    if (b.dataset.motion) devMotion = devMotion === b.dataset.motion ? null : b.dataset.motion;
+    if (b.id === "test-caption") devCaption = !devCaption;
+    if (b.id === "blink-now") blinkNow(performance.now() / 1000);
+    if (b.id === "back-live") { devExpr = null; devGaze = null; devMotion = null; devCaption = false; }
+    refresh();
+  });
+  refresh();
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

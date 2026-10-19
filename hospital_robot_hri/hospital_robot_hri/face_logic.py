@@ -100,7 +100,14 @@ class FaceLogic:
                        'options': [{'id': str(o.get('id', ''))[:24],
                                     'label': str(o.get('label', ''))[:40]}
                                    for o in opts[:6] if isinstance(o, dict)],
-                       'destination': str(ui.get('destination', ''))[:40]}
+                       'destination': str(ui.get('destination', ''))[:40],
+                       # Phase 7 (nav_flow): which screen, menu title, cancel label
+                       # ('' = hidden, None = the page's "No thanks"), Stop button
+                       'state': str(ui.get('state', ''))[:16],
+                       'title': str(ui.get('title', ''))[:60],
+                       'cancel': None if ui.get('cancel') is None
+                       else str(ui.get('cancel'))[:30],
+                       'stop': bool(ui.get('stop', False))}
             self.ui_t = t
 
     def on_speech_status(self, status: dict, t: float):
