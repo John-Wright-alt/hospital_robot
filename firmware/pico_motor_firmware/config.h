@@ -10,7 +10,8 @@
 // =============================================================================
 #pragma once
 
-#define FIRMWARE_VERSION "1.1.0"   // 1.1.0: head-column lift (lift.h, Phase 8)
+#define FIRMWARE_VERSION "1.2.0"   // 1.1.0: head-column lift (lift.h, Phase 8)
+                                   // 1.2.0: 3x HC-SR04 (ultrasonic.h, Phase 7)
 
 // -----------------------------------------------------------------------------
 // 1. PIN MAP — copied from Robot_Wiring_Guide.md §9.1. Do NOT change these
@@ -81,9 +82,9 @@
 //    prints for each motor here and delete the "#error" lines below.
 //    Re-run test06 if you ever remove or re-glue an encoder magnet.
 // -----------------------------------------------------------------------------
-#define LEFT_ZERO_ELEC_ANGLE   5.5377f
+#define LEFT_ZERO_ELEC_ANGLE   5.5131f
 #define LEFT_SENSOR_DIRECTION  Direction::CCW
-#define RIGHT_ZERO_ELEC_ANGLE  6.0960f
+#define RIGHT_ZERO_ELEC_ANGLE  5.7325f
 #define RIGHT_SENSOR_DIRECTION Direction::CCW
 
 #if !defined(LEFT_ZERO_ELEC_ANGLE) || !defined(LEFT_SENSOR_DIRECTION)
@@ -99,8 +100,8 @@
 //    Send "v 1 1" with the robot on blocks: BOTH wheels must turn so the robot
 //    would drive forward. If a wheel turns backwards, flip ITS sign.
 // -----------------------------------------------------------------------------
-#define LEFT_FORWARD_SIGN   (+1)
-#define RIGHT_FORWARD_SIGN  (-1)
+#define LEFT_FORWARD_SIGN   (-1) //was (+1)
+#define RIGHT_FORWARD_SIGN  (+1) //was (-1)
 
 // -----------------------------------------------------------------------------
 // 6. VELOCITY LOOP (PID) — starting values; tune with the 'k' command, then

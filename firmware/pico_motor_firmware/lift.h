@@ -77,7 +77,7 @@
 #define LIFT_SOFT_MIN_MM       5.0f    // 'l g' never goes below this (keeps off the switch)
 #endif
 #ifndef LIFT_SOFT_MAX_MM
-#define LIFT_SOFT_MAX_MM       390.0f  // 'l g' never goes above this
+#define LIFT_SOFT_MAX_MM       300.0f  // 'l g' never goes above this
 #endif
 
 // Speeds (mm/s) - slow, this moves at a patient's face height

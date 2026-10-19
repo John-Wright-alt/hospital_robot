@@ -63,6 +63,7 @@
 static void say(const char* fmt, ...);
 #define LIFT_PRINTLN(text) say("%s", text)
 #include "lift.h"                   // adds liftBegin/liftUpdate/liftCommand/...
+#include "ultrasonic.h"             // 1.2.0: 3x HC-SR04 low-obstacle sensors
 
 bool core1_separate_stack = true;   // give core 1 its own 8 KB stack
 
@@ -536,6 +537,7 @@ static void printInfo() {
       motorL.PID_velocity.P, motorL.PID_velocity.I, motorL.PID_velocity.D, VEL_LPF_TF);
   say("# forward signs: L=%d R=%d", LEFT_FORWARD_SIGN, RIGHT_FORWARD_SIGN);
   liftPrintInfo();                  // 1.1.0
+  usPrintInfo();                    // 1.2.0
 }
 
 static void handleLine(char* line, uint32_t now) {
@@ -586,11 +588,13 @@ static void handleLine(char* line, uint32_t now) {
     case 'l':                                          // 1.1.0: lift commands
       liftCommand(p, armState == ARMED);
       break;
+    case 'u': usCommand(p); break;                  // 1.2.0: u 1 | u 0 | u ?
     case 'i': printInfo(); break;
     case 'h': case '?':
       say("# commands: v <left> <right> | a 1 | a 0 | c | k <P> <I> <D> | i | h");
       say("# wheel speeds in rad/s, + = forward. Resend 'v' at least every %d ms.", CMD_TIMEOUT_MS);
       say("# lift: l h (home) | l p (park) | l g <mm> [speed] | l s (stop) | l ? (info)");
+      say("# ultrasonic: u 1 (on) | u 0 (off) | u ? (info)");
       break;
     default:
       say("# unknown command '%c' (send h for help)", cmd);
@@ -620,6 +624,7 @@ static void pollSerial(uint32_t now) {
 void setup1() {
   while (!g_core0Ready) delay(1);            // wait until the motors are set up
   analogReadResolution(12);
+  usBegin();                         // 1.2.0: echo interrupts on core 1
   estopLowSinceMs = millis();
 
   bool wdReboot = watchdog_enable_caused_reboot();   // true only after a real timeout
@@ -672,6 +677,7 @@ void loop1() {
 
   pollSerial(now);
   liftUpdate(armState == ARMED);   // 1.1.0: lift state machine + 'l' status line
+  usUpdate(now);                   // 1.2.0: ultrasonic round-robin, 'u' lines
   relayService(now);
 
   if (now - lastControlMs >= CONTROL_PERIOD_MS) {

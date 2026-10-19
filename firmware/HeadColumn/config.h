@@ -30,7 +30,7 @@
                             // switch are wired to the Pico in the robot body, not
                             // to this board. This board only watches for faces and
                             // reports them to the Pi over its USB cable.
-#define ENABLE_WIFI     1   // 1 = browser preview (http://headcolumn.local). The
+#define ENABLE_WIFI     0   // 1 = browser preview (http://headcolumn.local). The
                             // robot does NOT need WiFi - the Pi gets face data over
                             // USB. Set 0 on the finished robot (boots 15 s faster).
 
