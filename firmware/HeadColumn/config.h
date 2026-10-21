@@ -10,8 +10,8 @@
 // 1. WiFi
 // ---------------------------------------------------------------------
 // Must be a 2.4 GHz network. The ESP32-S3 cannot see 5 GHz networks.
-#define WIFI_SSID          "Vodacom-V6WF"
-#define WIFI_PASSWORD      "}+=S^>(rm]JgqV?6"
+#define WIFI_SSID          "YOUR_WIFI"
+#define WIFI_PASSWORD      "YOUR_PASSWORD"
 #define DEVICE_HOSTNAME    "headcolumn"      // browser: http://headcolumn.local
 
 // If the WiFi above can't be joined within 15 s, the board ALSO makes its
