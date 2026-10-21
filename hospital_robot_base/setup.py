@@ -28,6 +28,8 @@ setup(
             'odom_calibration = hospital_robot_base.odom_calibration:main',
             'ld06_check = hospital_robot_base.ld06_check:main',
             'fake_pico = hospital_robot_base.fake_pico:main',
+            'head_column = hospital_robot_base.head_column_node:main',
+            'lidar_gaze = hospital_robot_base.lidar_gaze_node:main',
         ],
     },
 )

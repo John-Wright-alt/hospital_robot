@@ -16,7 +16,7 @@ pico_bridge:
 
     # Centre of left tyre to centre of right tyre. URDF: 0.35 - 0.09 = 0.260.
     # Re-check on the real chassis (guide Part 9.6 calibrates it exactly).
-    wheel_separation: 0.26
+    wheel_separation: 0.245
 
     # Encoder counts per ONE turn of the WHEEL = 4096 x GEAR_RATIO (3.75).
     # Confirmed by your firmware's 'i' report. The bridge checks it on connect.
@@ -38,12 +38,13 @@ pico_bridge:
     base_frame: base_footprint
     left_wheel_joint: left_wheel_joint
     right_wheel_joint: right_wheel_joint
+    column_joint: column_joint   # Phase 8: the lift, published on /column_states once homed
 
 joint_state_publisher:
   ros__parameters:
     # Merges the wheel angles from the bridge with every other joint in the
     # URDF (e.g. the lift column, held at 0 until Phase 8) into /joint_states.
-    source_list: [wheel_states]
+    source_list: [wheel_states, column_states]   # column_states = lift height (Phase 8)
     rate: 30
 
 ldlidar:
@@ -66,3 +67,20 @@ mpu6050:
     frame_id: imu_link           # must match your URDF
     calibration_seconds: 2.0
     gyro_z_sign: 1.0             # set -1.0 if turning left gives negative z
+
+head_column:                     # Phase 8 (wiring rev 2): ESP32 camera + Pico lift
+  ros__parameters:
+    esp_port: /dev/headcam       # udev symlink for the FireBeetle (GUIDE_CHANGES Part 9)
+    auto_home_on_arm: true       # home the lift as soon as the robot is armed
+    search_after_home: false      # then lift and look for a face
+    soft_min_mm: 5.0             # = LIFT_SOFT_MIN_MM in lift.h
+    soft_max_mm: 300.0           # = LIFT_SOFT_MAX_MM in lift.h
+    search_speed: 15.0           # mm/s
+    track_speed: 20.0            # mm/s (lift.h caps it at LIFT_MAX_SPEED_MM_S)
+    track_gain: 0.8              # 1.0 = full correction per look, lower = calmer
+    deadband_mm: 15.0            # ignore errors smaller than this
+    confirm_frames: 2            # frames in a row before a face is believed
+    settle_frames: 2             # frames to wait after the lift stops
+    face_lost_timeout: 15.0      # s without a face while tracking -> search again
+    search_timeout: 60.0         # s of searching -> hold still and wait
+    park_timeout: 90.0           # s the park service waits

@@ -8,3 +8,15 @@ __pycache__/
 .pytest_cache/
 # Python leftovers
 # The LiDAR driver is someone else's repo, cloned separately (guide Part 4.3)
+__pycache__/
+
+# not our code / generated
+build/
+install/
+log/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.bak_*
+*.bak
+ldlidar_stl_ros2/

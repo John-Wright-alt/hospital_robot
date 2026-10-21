@@ -1,0 +1,57 @@
+# =============================================================================
+# gaze.yaml  --  settings for lidar_gaze (Phase 9: sensor-driven gaze)
+# FOR THE EYES ONLY - nothing here affects obstacle avoidance or safety.
+#
+# Write every decimal number WITH a decimal point (15.0, not 15): ROS 2 refuses
+# to load an integer into a parameter declared as a float.
+# After editing: colcon build --packages-select hospital_robot_base
+# =============================================================================
+lidar_gaze:
+  ros__parameters:
+    scan_topic: scan
+    odom_topic: odom
+    # Bearings are measured from here. NOT base_link: in your URDF base_link is
+    # the CAD corner of the chassis, so bearings from it would be skewed.
+    target_frame: base_footprint
+    use_tf: true                 # false = LiDAR-only test without robot_state_publisher
+    fallback_yaw_deg: -90.0      # only used when use_tf is false (= your URDF lidar_yaw)
+
+    # --- interest zone
+    bin_deg: 1.0
+    min_range_m: 0.15
+    max_range_m: 2.5             # people further away are ignored
+
+    # --- background ("what is normally there")
+    learn_scans: 20              # ~2 s: keep the area clear when the node starts
+    fg_margin_m: 0.15
+    fg_margin_frac: 0.05
+    absorb_s: 15.0               # still this long -> becomes background (boredom)
+    raise_scans: 5
+
+    # --- objects
+    cluster_jump_m: 0.25
+    min_points: 2
+    min_width_m: 0.02
+    max_width_m: 1.0
+    merge_dist_m: 0.45           # two legs -> one object
+
+    # --- tracking (anti-flicker)
+    gate_m: 0.6
+    alpha: 0.5
+    beta: 0.15
+    confirm_hits: 3              # scans before the eyes react (~0.3 s)
+    lost_timeout_s: 0.8
+
+    # --- which object to look at
+    w_near: 1.0
+    w_speed: 1.0
+    speed_ref_mps: 0.8
+    hold_s: 1.5                  # look at one object at least this long
+    switch_margin: 0.25
+
+    # --- robot motion (from /odom, if pico_bridge is running)
+    moving_linear_mps: 0.03
+    moving_angular_rps: 0.08
+    settle_after_motion_s: 1.0
+
+    publish_markers: true        # RViz debug spheres/arrow on /hri/gaze/markers

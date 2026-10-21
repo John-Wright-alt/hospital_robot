@@ -1,0 +1,21 @@
+# =============================================================================
+# waypoints_template.yaml -- example of ~/robot_ws/maps/<site>/waypoints.yaml
+# EASIEST: don't type numbers - drive the robot to each place (teleop) and run
+#     ros2 run hospital_robot_nav save_waypoint home --site apartment --label "Reception"
+#     ros2 run hospital_robot_nav save_waypoint doctor --site apartment --label "Doctor's office"
+#     ros2 run hospital_robot_nav save_waypoint xray --site apartment --label "X-ray"
+#     ros2 run hospital_robot_nav save_waypoint pharmacy --site apartment --label "Pharmacy"
+# with navigation.launch.py (AMCL) running and the robot well localized.
+#
+# The names doctor / xray / pharmacy MUST stay exactly like this: they are the
+# ids the touchscreen menu sends (hospital_robot_hri DESTINATIONS).
+# 'home' = start position, return position, and AMCL's initial pose.
+# x, y in metres in the map frame; yaw_deg = direction the robot faces on arrival
+# (0 = map +x, 90 = map +y). Values below are PLACEHOLDERS.
+# =============================================================================
+frame_id: map
+waypoints:
+  home:     {x: 0.0, y: 0.0, yaw_deg: 0.0, label: "Reception"}
+  doctor:   {x: 0.0, y: 0.0, yaw_deg: 0.0, label: "Doctor's office"}
+  xray:     {x: 0.0, y: 0.0, yaw_deg: 0.0, label: "X-ray"}
+  pharmacy: {x: 0.0, y: 0.0, yaw_deg: 0.0, label: "Pharmacy"}

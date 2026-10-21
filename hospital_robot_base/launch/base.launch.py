@@ -3,6 +3,8 @@
     ros2 launch hospital_robot_base base.launch.py
     ros2 launch hospital_robot_base base.launch.py use_imu:=true
     ros2 launch hospital_robot_base base.launch.py use_imu:=true use_ekf:=true
+    ros2 launch hospital_robot_base base.launch.py use_head:=true
+        ^ Phase 8: also start head_column (ESP32 camera + Pico lift)
     ros2 launch hospital_robot_base base.launch.py pico_port:=/tmp/pico use_lidar:=false
         ^ with the fake Pico (fake_pico running in another terminal), no LiDAR
 
@@ -35,6 +37,7 @@ def generate_launch_description():
     use_lidar = LaunchConfiguration('use_lidar')
     use_imu = LaunchConfiguration('use_imu')
     use_ekf = LaunchConfiguration('use_ekf')
+    use_head = LaunchConfiguration('use_head')
     pico_port = LaunchConfiguration('pico_port')
 
     robot_description = ParameterValue(
@@ -56,6 +59,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_lidar', default_value='true'),
         DeclareLaunchArgument('use_imu', default_value='false'),
         DeclareLaunchArgument('use_ekf', default_value='false'),
+        DeclareLaunchArgument('use_head', default_value='false',
+                              description='Phase 8: start head_column (ESP32 camera + lift)'),
 
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              output='screen',
@@ -71,11 +76,16 @@ def generate_launch_description():
 
         Node(package='ldlidar_stl_ros2', executable='ldlidar_stl_ros2_node',
              name='ldlidar', output='screen', parameters=[base_params],
+             respawn=True, respawn_delay=3.0,   # LD06 driver can quit at start-up
              condition=IfCondition(use_lidar)),
 
         Node(package='hospital_robot_base', executable='mpu6050_node',
              name='mpu6050', output='screen', parameters=[base_params],
              condition=IfCondition(use_imu)),
+
+        Node(package='hospital_robot_base', executable='head_column',
+             name='head_column', output='screen', parameters=[base_params],
+             condition=IfCondition(use_head)),
 
         Node(package='robot_localization', executable='ekf_node',
              name='ekf_filter_node', output='screen', parameters=[ekf_params],

@@ -1,0 +1,474 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="hospital_robot">
+
+  <xacro:include filename="$(find hospital_robot_description)/urdf/inertial_macros.xacro"/>
+
+  <!-- =================================================================
+       PARAMETERS
+       Filled in from Measurements.md + Parts.md (30 Aug 2026).
+
+       Your Inventor origin is at a CORNER of the chassis footprint
+       (X=0 at one end, Y=0 at one side) — NOT at the centre and NOT at
+       the drive axle. Every xyz value below is used exactly as you
+       measured it. A few numbers could not come directly from your
+       worksheet; those are marked VERIFY and explained in
+       README_NEXT_STEPS.md.
+       ================================================================= -->
+
+  <xacro:property name="mesh_pkg" value="package://hospital_robot_description/meshes"/>
+  <xacro:property name="mesh_scale" value="0.001 0.001 0.001"/>  <!-- mm STL -> m -->
+
+  <!-- Chassis -->
+  <xacro:property name="base_length" value="0.354"/>
+  <xacro:property name="base_width"  value="0.412"/>
+  <xacro:property name="base_height" value="0.305501"/>
+  <xacro:property name="base_mass"   value="11.6331"/>       
+
+  <!-- VERIFY: vertical distance from the ground up to your Z=0 origin
+       plane. See README_NEXT_STEPS.md Part A. -->
+  <xacro:property name="origin_ground_clearance" value="0.051"/>
+
+  <!-- Drive wheels -->
+  <xacro:property name="wheel_radius"     value="0.072"/>
+  <xacro:property name="wheel_width"      value="0.029"/>
+  <xacro:property name="wheel_separation" value="0.245"/>
+  <xacro:property name="wheel_x"          value="0.176982"/>
+  <xacro:property name="wheel_mass"       value="0.34"/>   
+
+  <!-- Measure these two directly off the base_link STL, the same way
+       you measured caster1_y/caster2_y/etc: from the same corner
+       origin (X=0, Y=0) that wheel_x is measured from, straight
+       across to the center of each wheel-mount hole. Replace the
+       0.0 placeholders below with your real numbers — do NOT use
+       base_width/wheel_separation math here, that's what was
+       causing the misalignment. -->
+  <xacro:property name="wheel_left_y"     value="0.3315"/>  
+  <xacro:property name="wheel_right_y"    value="0.0865"/>  
+
+  <!-- Casters — you have FOUR (one per corner), not one. Positions are
+       your raw Measurements.md values, used directly. -->
+  <xacro:property name="caster_radius" value="0.025"/>
+  <xacro:property name="caster_mass"   value="0.1"/>       
+  <xacro:property name="caster1_x" value="0.0302"/>
+  <xacro:property name="caster1_y" value="0.030206"/>
+  <xacro:property name="caster2_x" value="0.0302"/>
+  <xacro:property name="caster2_y" value="0.381794"/>
+  <xacro:property name="caster3_x" value="0.3238"/>
+  <xacro:property name="caster3_y" value="0.030206"/>
+  <xacro:property name="caster4_x" value="0.3238"/>
+  <xacro:property name="caster4_y" value="0.381794"/>
+
+  <!-- LiDAR -->
+  <xacro:property name="lidar_x"      value="0.238"/>
+  <xacro:property name="lidar_y"      value="0.210"/>
+  <xacro:property name="lidar_z"      value="0.299"/>
+  <xacro:property name="lidar_yaw"    value="-1.5708"/>
+  <xacro:property name="lidar_radius" value="0.038"/>
+  <xacro:property name="lidar_height" value="0.04"/>
+  <xacro:property name="lidar_mass"   value="0.19"/>       <!-- VERIFY: Parts.md lists 0.042 kg, unusually light for an LD06 -->
+
+  <!-- Lifting column (prismatic) -->
+  <xacro:property name="column_x"      value="0.175"/>
+  <xacro:property name="column_y"      value="0.206"/>
+  <xacro:property name="column_z"      value="0.086971"/>
+  <xacro:property name="column_side"   value="0.08"/>
+  <xacro:property name="column_length" value="0.677971"/>  <!-- VERIFY: derived, see README Part B -->
+  <xacro:property name="column_travel" value="0.300"/>
+  <xacro:property name="column_mass"   value="1.5"/>       
+
+  <!-- Camera — expressed relative to column_link's own origin (derived
+       from your base_link-relative measurement, see README Part B) -->
+  <xacro:property name="camera_x"     value="0.011737"/>
+  <xacro:property name="camera_y"     value="0.0"/>
+  <xacro:property name="camera_z"     value="-0.05"/>
+  <xacro:property name="camera_pitch" value="-${10*pi/180}"/>  <!-- 10 deg, from Measurements.md -->
+  <xacro:property name="camera_mass"  value="0.05"/>          
+
+  <!-- IMU -->
+  <xacro:property name="imu_x" value="-0.052"/>
+  <xacro:property name="imu_y" value="-0.066"/>
+  <xacro:property name="imu_z" value="0.497"/>
+
+  <!-- Mesh correction: your Inventor parts are Y-up, ROS/RViz is Z-up.
+       rpy = "${pi/2} 0 0" fixes that (Inventor Y -> RViz Z, up).
+       base_link and column ALSO had their horizontal axes swapped
+       (Inventor X needs to become RViz Y, and vice versa) — that
+       needs a further 90° turn about the now-vertical axis, so
+       those two get a yaw term added: "${pi/2} 0 ${pi/2}".
+
+       If forward/back or left/right ends up mirrored (e.g. the part
+       is now rotated the wrong way round rather than matching),
+       change just that part's yaw number to "${-pi/2}" instead —
+       the two yaw directions are mirror images and only looking in
+       RViz tells you which one is right. -->
+
+  <!-- base_link: turned another 180° about the vertical (Z) axis on
+       top of the existing correction — this is on top of, not
+       instead of, the earlier fix. If this actually needed a
+       different axis, undo the "+pi" below and add it to the first
+       (roll) or second (pitch) number instead. -->
+  <xacro:property name="base_mesh_rpy"   value="${pi/2} 0 ${pi/2 + pi}"/>
+  <xacro:property name="wheel_mesh_rpy"  value="${pi/2} 0 0"/>
+  <xacro:property name="lidar_mesh_rpy"  value="${pi/2} 0 0"/>
+  <xacro:property name="camera_mesh_rpy" value="0 0 0"/>
+  <xacro:property name="column_mesh_rpy" value="${pi/2} 0 ${pi/2 + pi}"/>
+  <xacro:property name="caster_mesh_rpy" value="${pi/2} 0 0"/>
+
+  <!-- ============================================================
+       PER-PART MESH OFFSETS — from origin.txt, RE-MAPPED again for
+       base_link and column now that they carry the extra yaw above:
+       the offset's old X and Z values trade places with the new Y
+       (mesh X -> link Y, mesh Z -> link X, mesh Y -> link Z, same
+       order the yaw rotation now sends the geometry itself).
+       lidar/camera offsets untouched — you're adjusting those
+       yourself.
+0
+       base_link's offset also flips sign on X and Y (not Z) to
+       match its extra 180° turn above — a 180° spin about Z negates
+       X and Y and leaves Z alone, so the part turns in place around
+       its own mount point instead of swinging out to the side.
+
+       Still trial-sign per axis: if a mesh moves the WRONG way on
+       one number after rebuilding, flip just that number's sign —
+       the other two are independent, leave them alone.
+       ============================================================ -->
+  <xacro:property name="base_mesh_xyz"   value="0.005986 0.176 0.030501"/>
+  <xacro:property name="lidar_mesh_xyz"  value="-0.0325 0.055177 -0.045470 "/>
+  <xacro:property name="camera_mesh_xyz" value="-0.009 -0.01 0.0"/>
+  <xacro:property name="column_mesh_xyz" value="0.018221 0.004221 -0.112747"/>
+
+  <!-- Caster is reused 4x, so it needs its own local origin, not a
+       single offset — not covered by origin.txt. Leave at 0 0 0 if
+       it already looks correct, otherwise fix independently. -->
+  <xacro:property name="caster_mesh_xyz" value="0 0 0"/>
+
+
+  <!-- ================= MATERIALS ================= -->
+  <material name="grey">  <color rgba="0.6 0.6 0.6 1.0"/></material>
+  <material name="dark">  <color rgba="0.2 0.2 0.2 1.0"/></material>
+  <material name="orange"><color rgba="0.9 0.45 0.1 1.0"/></material>
+  <material name="blue">  <color rgba="0.2 0.4 0.8 1.0"/></material>
+
+  <!-- ================= BASE FOOTPRINT ================= -->
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child  link="base_link"/>
+    <origin xyz="${-wheel_x} ${-(wheel_left_y + wheel_right_y)/2} ${origin_ground_clearance}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ================= CHASSIS ================= -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="${base_mesh_xyz}" rpy="${base_mesh_rpy}"/>
+      <geometry>
+        <mesh filename="${mesh_pkg}/base_link.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <origin xyz="${base_length/2} ${base_width/2} ${base_height/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box mass="${base_mass}" x="${base_length}" y="${base_width}" z="${base_height}">
+      <origin xyz="${base_length/2} ${base_width/2} ${base_height/2}" rpy="0 0 0"/>
+    </xacro:inertial_box>
+  </link>
+
+  <!-- ================= DRIVE WHEELS ================= -->
+  <!-- y for each wheel is now an explicit measured value
+       (wheel_left_y / wheel_right_y above) instead of a symmetric
+       centreline calculation. -->
+  <xacro:macro name="drive_wheel" params="prefix wheel_y">
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child  link="${prefix}_wheel_link"/>
+      <origin xyz="${wheel_x} ${wheel_y} ${wheel_radius - origin_ground_clearance}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.01" friction="0.01"/>
+    </joint>
+
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="${wheel_mesh_rpy}"/>
+        <geometry>
+          <mesh filename="${mesh_pkg}/wheel.stl" scale="${mesh_scale}"/>
+        </geometry>
+        <material name="dark"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <xacro:inertial_cylinder mass="${wheel_mass}" length="${wheel_width}" radius="${wheel_radius}">
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+      </xacro:inertial_cylinder>
+    </link>
+  </xacro:macro>
+
+  <xacro:drive_wheel prefix="left"  wheel_y="${wheel_left_y}"/>
+  <xacro:drive_wheel prefix="right" wheel_y="${wheel_right_y}"/>
+
+  <!-- ================= CASTERS (x4) ================= -->
+  <xacro:macro name="caster" params="suffix cx cy">
+    <joint name="caster${suffix}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="caster${suffix}_link"/>
+      <origin xyz="${cx} ${cy} ${caster_radius - origin_ground_clearance}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="caster${suffix}_link">
+      <visual>
+        <origin xyz="${caster_mesh_xyz}" rpy="${caster_mesh_rpy}"/>
+        <geometry>
+          <mesh filename="${mesh_pkg}/caster.stl" scale="${mesh_scale}"/>
+        </geometry>
+        <material name="dark"/>
+      </visual>
+      <collision>
+        <geometry><sphere radius="${caster_radius}"/></geometry>
+      </collision>
+      <xacro:inertial_sphere mass="${caster_mass}" radius="${caster_radius}">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </xacro:inertial_sphere>
+    </link>
+  </xacro:macro>
+
+  <xacro:caster suffix="1" cx="${caster1_x}" cy="${caster1_y}"/>
+  <xacro:caster suffix="2" cx="${caster2_x}" cy="${caster2_y}"/>
+  <xacro:caster suffix="3" cx="${caster3_x}" cy="${caster3_y}"/>
+  <xacro:caster suffix="4" cx="${caster4_x}" cy="${caster4_y}"/>
+
+  <!-- ================= LIDAR ================= -->
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="lidar_link"/>
+    <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 ${lidar_yaw}"/>
+  </joint>
+
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="${lidar_mesh_xyz}" rpy="${lidar_mesh_rpy}"/>
+      <geometry>
+        <mesh filename="${mesh_pkg}/lidar.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${lidar_radius}" length="${lidar_height}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder mass="${lidar_mass}" length="${lidar_height}" radius="${lidar_radius}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:inertial_cylinder>
+  </link>
+
+  <!-- ================= LIFTING COLUMN (PRISMATIC) ================= -->
+  <joint name="column_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child  link="column_link"/>
+    <origin xyz="${column_x} ${column_y} ${column_z}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="${column_travel}" effort="200.0" velocity="0.05"/>
+    <dynamics damping="10.0" friction="1.0"/>
+  </joint>
+
+  <link name="column_link">
+    <visual>
+      <origin xyz="${column_mesh_xyz}" rpy="${column_mesh_rpy}"/>
+      <geometry>
+        <mesh filename="${mesh_pkg}/column.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${column_length/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${column_side} ${column_side} ${column_length}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box mass="${column_mass}" x="${column_side}" y="${column_side}" z="${column_length}">
+      <origin xyz="0 0 ${column_length/2}" rpy="0 0 0"/>
+    </xacro:inertial_box>
+  </link>
+
+  <!-- ================= CAMERA ================= -->
+  <joint name="camera_joint" type="fixed">
+    <parent link="column_link"/>
+    <child  link="camera_link"/>
+    <origin xyz="${camera_x} ${camera_y} ${column_length + camera_z}" rpy="0 ${camera_pitch} 0"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <origin xyz="${camera_mesh_xyz}" rpy="${camera_mesh_rpy}"/>
+      <geometry>
+        <mesh filename="${mesh_pkg}/camera.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.03 0.09 0.025"/></geometry>
+    </collision>
+    <xacro:inertial_box mass="${camera_mass}" x="0.03" y="0.09" z="0.025">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:inertial_box>
+  </link>
+
+  <!-- Optical frame: REP-103 says camera optics use Z-forward, X-right,
+       Y-down. Vision nodes expect this. Keep it. -->
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child  link="camera_optical_link"/>
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+  <link name="camera_optical_link"/>
+
+  <!-- ================= IMU ================= -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="column_link"/>
+    <child  link="imu_link"/>
+    <origin xyz="${imu_x} ${imu_y} ${imu_z}" rpy="0 0 0"/>
+  </joint>
+  <link name="imu_link"/>
+
+  <!-- =================================================================
+       PHASE 3 — SIMULATION
+       Everything below is new. It doesn't change how the robot looks
+       or measures in RViz — RViz ignores <ros2_control> and <gazebo>
+       tags entirely. It only takes effect inside Gazebo.
+       ================================================================= -->
+
+  <!-- ================================================================
+       ros2_control: exposes left_wheel_joint, right_wheel_joint and
+       column_joint as controllable interfaces. gz_ros2_control drives
+       them inside Gazebo's physics; on the real robot, this same block
+       would instead point at your real motor driver hardware interface
+       — the controller code above it doesn't change.
+       ================================================================ -->
+  <ros2_control name="GazeboSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <joint name="left_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="velocity"/>
+      <state_interface name="position"/>
+    </joint>
+    <joint name="right_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="velocity"/>
+      <state_interface name="position"/>
+    </joint>
+    <joint name="column_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>/home/john-wright/robot_ws/sim_config/controllers.yaml</parameters>
+      <hold_joints>false</hold_joints>
+    </plugin>
+  </gazebo>
+
+  <!-- ================================================================
+       Friction: without this, Gazebo's default surface friction can
+       make the drive wheels skate instead of grip, and can make the
+       free-spinning casters drag along the floor instead of rolling.
+       mu1/mu2 are the two friction coefficients Gazebo's physics
+       engine uses for that contact surface — higher = more grip.
+       ================================================================ -->
+  <gazebo reference="left_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+  </gazebo>
+  <gazebo reference="right_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+  </gazebo>
+  <gazebo reference="caster1_link"><mu1>0.0</mu1><mu2>0.0</mu2></gazebo>
+  <gazebo reference="caster2_link"><mu1>0.0</mu1><mu2>0.0</mu2></gazebo>
+  <gazebo reference="caster3_link"><mu1>0.0</mu1><mu2>0.0</mu2></gazebo>
+  <gazebo reference="caster4_link"><mu1>0.0</mu1><mu2>0.0</mu2></gazebo>
+
+  <!-- ================================================================
+       LiDAR sensor — publishes /scan, the topic your Phase 3 plan's
+       milestone 3 checks for.
+       ================================================================ -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar" type="gpu_lidar">
+      <pose>0 0 0 0 0 0</pose>
+      <topic>scan</topic>
+      <gz_frame_id>lidar_link</gz_frame_id>
+      <update_rate>10</update_rate>
+      <lidar>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>12.0</max>
+        </range>
+      </lidar>
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+    </sensor>
+  </gazebo>
+
+  <!-- ================================================================
+       IMU sensor — publishes /imu. Not one of the 7 milestones by
+       itself, but robot_localization (already in your planned package
+       list) can fuse this with wheel odometry later for a smoother
+       /odom before SLAM/Nav2 use it.
+       ================================================================ -->
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <topic>imu</topic>
+      <update_rate>100</update_rate>
+      <always_on>true</always_on>
+    </sensor>
+  </gazebo>
+
+  <!-- ================================================================
+       Camera sensor — optional bonus, not required by any of the 7
+       milestones (they only need the LiDAR for SLAM/Nav2), but you do
+       have a real camera on the robot, so it's included here. Delete
+       this whole <gazebo reference="camera_link"> block if you'd
+       rather add it later.
+       ================================================================ -->
+  <gazebo reference="camera_link">
+    <sensor name="camera" type="camera">
+      <pose>0 0 0 0 0 0</pose>
+      <topic>camera/image_raw</topic>
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>10.0</far>
+        </clip>
+      </camera>
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+    </sensor>
+  </gazebo>
+
+</robot>

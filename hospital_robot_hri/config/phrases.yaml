@@ -1,0 +1,372 @@
+# =============================================================================
+# phrases.yaml  --  Anna's message library (what she says, and when)
+#
+# Personality: Anna, a calm, polite hospital guidance companion with a light
+# sense of humour. Her wake-up lines are spoken slowly, with long pauses, in a
+# gentle, reassuring way (think of a friendly care robot).
+#   * The FIRST line under `phrases` is the primary phrase: clear and plain.
+#   * `playful` lines are used now and then (humour_chance in speech.yaml) and
+#     ONLY for chatter/info. Safety messages (warning/critical) are always plain;
+#     the node refuses to start if a warning/critical event has playful lines.
+#   * Never joke about patients, illness, disability or staff.
+#
+# Fields
+#   priority          cue | chatter | info | warning | critical   (see speech_logic.py)
+#   sound             optional chime before the words: start wake move tick attention alert ok
+#   phrases           sentences (first = primary). rotate: true cycles through them.
+#   cooldown_s        the same event is not repeated within this time
+#   max_age_s         if it could not be played within this time, it is dropped
+#   length_scale      optional: speed for THIS event (> 1 = slower). Default: speech.yaml
+#   sentence_silence  optional: pause between sentences in s. Default: speech.yaml
+#
+# After changing ANY sentence or speed, render the audio again:
+#     ros2 run hospital_robot_hri audio_tool render
+# (Sentences that are not rendered still work: Piper renders them on first use,
+#  or espeak-ng speaks warnings at once.)
+#
+# "Trigger" says what makes Anna say it TODAY. Events marked (Phase 7) are not
+# triggered automatically yet: the navigation task layer will publish them on
+# /hri/speech/event once Nav2 runs on the robot.
+# =============================================================================
+events:
+
+  # ------------------------------------------------------------ Anna's wake-up (hri_interaction)
+  wake_intro:             # Trigger: someone taps the screen while Anna sleeps
+    priority: info
+    sound: wake
+    cooldown_s: 0.0
+    max_age_s: 15.0
+    length_scale: 1.3     # slow and calm
+    sentence_silence: 0.6 # long, gentle pauses between sentences
+    phrases:
+      - "Hello, I am Anna. Your personal hospital guidance companion. Please wait so I can adjust for a more comfortable use."
+
+  adjust_done:            # Trigger: the camera found the face and the column stopped there
+    priority: info
+    sound: ok
+    cooldown_s: 0.0
+    max_age_s: 15.0
+    length_scale: 1.2
+    sentence_silence: 0.5
+    phrases:
+      - "The touchscreen is now positioned for your ergonomic comfort. How may I assist you today?"
+
+  adjust_no_face:         # Trigger: no face found within adjust_timeout_s
+    priority: info
+    cooldown_s: 0.0
+    max_age_s: 15.0
+    length_scale: 1.2
+    sentence_silence: 0.5
+    phrases:
+      - "I could not find your face, so I will stay at this height. How may I assist you today?"
+
+  adjust_unavailable:     # Trigger: the lift cannot move (robot not armed, lift fault, no head node)
+    priority: info
+    cooldown_s: 0.0
+    max_age_s: 15.0
+    length_scale: 1.2
+    sentence_silence: 0.5
+    phrases:
+      - "I cannot adjust my height right now, but I am still happy to help. How may I assist you today?"
+
+  chose_doctor:           # Trigger: "Doctor's office" pressed on the menu
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "The doctor's office. Thank you. I am lowering my screen so that I can travel safely."
+
+  chose_xray:             # Trigger: "X-ray room" pressed on the menu
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "The X-ray room. Thank you. I am lowering my screen so that I can travel safely."
+
+  chose_pharmacy:         # Trigger: "Pharmacy" pressed on the menu
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "The pharmacy. Thank you. I am lowering my screen so that I can travel safely."
+
+  nav_not_ready:          # Trigger: a destination was chosen but navigation (Phase 7) is not on yet
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "My navigation is not switched on yet, so I will stay here for now."
+
+  goodbye:                # Trigger: menu timed out, "No thanks" pressed, or back to sleep
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.2
+    sentence_silence: 0.5
+    phrases:
+      - "Thank you. I will be right here if you need me."
+
+  # ------------------------------------------------------------ start / stop
+  startup:                # Trigger: hri_speech starts
+    priority: info
+    sound: start
+    cooldown_s: 30.0
+    phrases:
+      - "Hello! I'm Anna, and I'm switching on."
+    playful:
+      - "Hello! Anna here. Just stretching my circuits. I'll be ready in a moment."
+
+  ready:                  # Trigger: /hri/speech/event (spare)
+    priority: info
+    cooldown_s: 60.0
+    phrases:
+      - "I'm Anna, and I'm ready to help. Please tap my screen if you need directions."
+    playful:
+      - "I'm ready! Tap my screen and I'll show you the way. No tips required."
+
+  shutdown:               # Trigger: hri_speech is stopped with Ctrl+C
+    priority: info
+    cooldown_s: 0.0
+    phrases:
+      - "I'm switching off now. Goodbye!"
+    playful:
+      - "Goodbye for now. I'll be dreaming of corridors."
+
+  # ------------------------------------------------------------ people nearby
+  greeting:               # Trigger: OFF by default (greet_enabled). Someone stands close while parked
+    priority: chatter
+    sound: start
+    cooldown_s: 60.0
+    phrases:
+      - "Hello! I'm Anna, the hospital guide robot. Tap my screen if you need directions."
+    playful:
+      - "Hello there! Looking for somewhere? Tap my screen. I know all the shortcuts. Well, most of them."
+      - "Hi! I'm Anna. I'm here to help you find your way. Just tap my screen."
+
+  thank_you:              # Trigger: /hri/expression leaves 'assistance'
+    priority: info
+    cooldown_s: 20.0
+    phrases:
+      - "Thank you for your help!"
+    playful:
+      - "Thank you! I couldn't have done it without you. Literally."
+
+  # ------------------------------------------------------------ motors and motion
+  motors_armed:           # Trigger: /robot_state becomes ARMED
+    priority: warning
+    sound: attention
+    cooldown_s: 5.0
+    phrases:
+      - "My motors are now on. Please keep clear of my wheels."
+
+  motors_off:             # Trigger: /robot_state goes from ARMED to DISARMED
+    priority: info
+    cooldown_s: 10.0
+    phrases:
+      - "My motors are off. I'm staying right here."
+    playful:
+      - "Motors off. Time for a little rest."
+
+  moving_start:           # Trigger: /odom shows the robot starting to move
+    priority: warning
+    sound: move
+    cooldown_s: 3.0
+    phrases:
+      - "Excuse me, I'm starting to move. Please mind my path."
+
+  moving_resume:          # Trigger: moving again within 10 s of stopping (chime only)
+    priority: cue
+    sound: move
+    cooldown_s: 2.0
+
+  moving_cue:             # Trigger: every 6 s while moving (soft tick, no words)
+    priority: cue
+    sound: tick
+    cooldown_s: 1.0
+
+  moving_reminder:        # Trigger: every 45 s while moving
+    priority: info
+    cooldown_s: 20.0
+    rotate: true
+    phrases:
+      - "Robot passing. Thank you for making way."
+      - "Excuse me, robot coming through."
+      - "Please mind my path. Thank you."
+    playful:
+      - "Excuse me. I'd say I'm in a hurry, but walking pace is my top speed."
+      - "Robot coming through. Don't worry, I brake for everyone."
+      - "Excuse me, please. I'm very polite, but not very good at squeezing past."
+
+  reversing:              # Trigger: /odom shows the robot driving backwards
+    priority: warning
+    sound: attention
+    cooldown_s: 8.0
+    phrases:
+      - "Caution, I'm reversing. Please mind behind me."
+
+  # ------------------------------------------------------------ faults (plain language only)
+  estop:                  # Trigger: /robot_state becomes ESTOP
+    priority: critical
+    sound: alert
+    cooldown_s: 3.0
+    phrases:
+      - "Emergency stop pressed. My motors are off."
+
+  estop_released:         # Trigger: /robot_state goes from ESTOP to DISARMED
+    priority: info
+    cooldown_s: 5.0
+    phrases:
+      - "Emergency stop released. A staff member must switch my motors back on."
+
+  fault:                  # Trigger: /robot_state becomes FAULT (repeats every 60 s)
+    priority: critical
+    sound: alert
+    cooldown_s: 30.0
+    phrases:
+      - "I have a fault and have stopped my motors. Please call a staff member."
+
+  controller_lost:        # Trigger: /robot_state stops arriving for 3 s
+    priority: critical
+    sound: alert
+    cooldown_s: 30.0
+    phrases:
+      - "I've lost contact with my motor controller. Please call a staff member."
+
+  controller_restored:    # Trigger: /robot_state arrives again after controller_lost
+    priority: info
+    cooldown_s: 10.0
+    phrases:
+      - "Contact with my motor controller is back."
+
+  battery_low:            # Trigger: BATT_WARN appears in /pico/status (repeats every 5 min)
+    priority: warning
+    sound: attention
+    cooldown_s: 120.0
+    phrases:
+      - "My battery is low. Please let a staff member know I need charging."
+
+  assistance:             # Trigger: /hri/expression = assistance (repeats every 30 s)
+    priority: warning
+    sound: attention
+    cooldown_s: 15.0
+    phrases:
+      - "Excuse me, I need help from a staff member, please."
+
+  # ------------------------------------------------------------ navigation (Phase 7)
+  journey_start:          # (Phase 7) before the robot starts guiding
+    priority: info
+    sound: move
+    cooldown_s: 10.0
+    phrases:
+      - "Please follow me. I'll go slowly, and I'll wait if you need a moment."
+    playful:
+      - "Please follow me. I'll go slowly, and I promise not to take the stairs."
+
+  waiting_for_people:     # (Phase 7) temporary obstacle, robot waiting
+    priority: info
+    cooldown_s: 15.0
+    phrases:
+      - "Excuse me, may I please pass?"
+    playful:
+      - "Excuse me, may I squeeze past? I'm narrower than I look."
+
+  rerouting:              # (Phase 7) Nav2 recovery / replanning
+    priority: info
+    cooldown_s: 20.0
+    phrases:
+      - "This way looks blocked. I'm finding another route."
+    playful:
+      - "Change of plans! I know another way."
+
+  still_with_me:          # (Phase 7) follower check
+    priority: info
+    cooldown_s: 20.0
+    phrases:
+      - "Are you still with me? Please tap my screen when you're ready to continue."
+    playful:
+      - "Still with me? Take your time. Patience is one of my best features."
+
+  arrived:                # (Phase 7) goal reached
+    priority: info
+    sound: ok
+    cooldown_s: 10.0
+    phrases:
+      - "We have arrived. Would you like me to wait here for you, or shall I go back on my own? Please choose on my screen."
+
+  returning_to_base:      # (Phase 7)
+    priority: info
+    cooldown_s: 30.0
+    phrases:
+      - "I'm heading back to my base now. Thank you!"
+
+  route_blocked:          # (Phase 7) recovery failed
+    priority: warning
+    sound: attention
+    cooldown_s: 30.0
+    phrases:
+      - "My route is blocked and I have stopped. Please call a staff member."
+
+  door_help:              # (Phase 7) closed door (CR11)
+    priority: warning
+    sound: attention
+    cooldown_s: 30.0
+    phrases:
+      - "Excuse me, could someone please open this door for me?"
+
+  localization_lost:      # (Phase 7) AMCL lost
+    priority: warning
+    sound: attention
+    cooldown_s: 30.0
+    phrases:
+      - "I'm not sure where I am, so I have stopped. Please call a staff member."
+
+  nav_failed:             # (Phase 7) navigation gave up
+    priority: warning
+    sound: attention
+    cooldown_s: 30.0
+    phrases:
+      - "I can't reach the destination, so I have stopped. Please call a staff member."
+
+  # ------------------------------------------------------------ navigation flow (Phase 7, nav_flow.py)
+  guide_paused:           # Trigger: Stop pressed on the screen while driving
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "I have stopped. Please choose on my screen what you would like to do."
+
+  waiting_here:           # Trigger: "Wait for me here" pressed at the destination
+    priority: info
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "I will wait for you right here. When you are ready, please tap my screen."
+
+  returning_with_you:     # Trigger: "Take me back to reception" pressed
+    priority: info
+    sound: move
+    cooldown_s: 0.0
+    length_scale: 1.15
+    phrases:
+      - "Let's go back to reception together. Please follow me."
+
+  back_at_base:           # Trigger: back at reception with the person
+    priority: info
+    sound: ok
+    cooldown_s: 0.0
+    length_scale: 1.2
+    phrases:
+      - "We are back at reception. Thank you, and take care."
+
+  nav_not_armed:          # Trigger: a trip failed because the motors are off (not armed / E-stop)
+    priority: warning
+    sound: attention
+    cooldown_s: 10.0
+    phrases:
+      - "My motors are switched off, so I cannot drive. Please ask a staff member to help."
+  # ------------------------------------------------------------ test
+  speaker_test:           # Trigger: audio_tool / test procedure only
+    priority: info
+    sound: ok
+    cooldown_s: 0.0
+    phrases:
+      - "Speaker test. One, two, three. Can you hear me clearly?"

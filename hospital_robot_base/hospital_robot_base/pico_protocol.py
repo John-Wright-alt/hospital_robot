@@ -17,6 +17,12 @@ Protocol (from pico_motor_firmware 1.0.x):
                 s <flags_hex> <arm_state> <vbat_V> <vmot_V>   on change + every 500 ms
                    arm_state: 0 DISARMED, 1 ARMING, 2 ARMED, 3 DISARMING
                 # <text>                                     human message
+
+Head-column lift (firmware 1.1.0, lift.h, Phase 8):
+  PC -> Pico :  l h | l p | l g <mm> [speed] | l s | l ?
+  Pico -> PC :  l <state> <homed> <pos_mm> <target_mm> <switch> <fault>   10 Hz
+ESP32-S3 head camera (separate USB port, /dev/headcam):
+  ESP -> PC  :  f <frame> <found> <cx> <cy> <width_px> <error_mm> <fps>
 """
 
 import math
@@ -35,6 +41,16 @@ class EncoderMsg:
     vel_l: Optional[float]      # wheel rad/s as measured by the Pico (None if not sent)
     vel_r: Optional[float]
     micros: Optional[int]       # Pico clock in microseconds (None if not sent)
+
+
+@dataclass
+class LiftMsg:
+    state: int                  # 0 IDLE 1 MOVING 2 HOMING 3 PARKING 4 FAULT
+    homed: bool
+    pos_mm: float
+    target_mm: float
+    switch: bool                # True = home switch pressed (or wire broken)
+    fault: int                  # see LIFT_FAULT_NAMES
 
 
 @dataclass
@@ -81,6 +97,10 @@ def parse_line(line: str):
                                   None, None, None)
             return None
 
+        if kind == 'l' and len(parts) >= 7:
+            return LiftMsg(int(parts[1]), parts[2] == '1', float(parts[3]),
+                           float(parts[4]), parts[5] == '1', int(parts[6]))
+
         if kind == 's' and len(parts) >= 5:
             return StatusMsg(line, int(parts[1], 16), int(parts[2]),
                              float(parts[3]), float(parts[4]))
@@ -124,6 +144,67 @@ def status_text(status: StatusMsg) -> str:
     return (f'{ARM_NAMES.get(status.arm_state, status.arm_state)}  '
             f'flags={status.flags:04X} ({decode_flags(status.flags)})  '
             f'vbat={status.vbat:.2f} V  vmot={status.vmot:.2f} V')
+
+
+# Head-column lift (lift.h). Keep in step with the firmware!
+LIFT_STATE_NAMES = {0: 'IDLE', 1: 'MOVING', 2: 'HOMING', 3: 'PARKING', 4: 'FAULT'}
+LIFT_FAULT_NAMES = {0: 'none', 1: 'switch never found', 2: 'switch stuck pressed',
+                    3: 'switch not found on slow approach'}
+LIFT_IDLE, LIFT_MOVING, LIFT_HOMING, LIFT_PARKING, LIFT_FAULT = 0, 1, 2, 3, 4
+
+
+def lift_text(m: LiftMsg) -> str:
+    return (f'{LIFT_STATE_NAMES.get(m.state, m.state)} homed={int(m.homed)} '
+            f'pos={m.pos_mm:.1f} mm target={m.target_mm:.1f} mm '
+            f'switch={"PRESSED" if m.switch else "free"} '
+            f'fault={LIFT_FAULT_NAMES.get(m.fault, m.fault)}')
+
+
+def lift_command_line(text: str) -> Optional[str]:
+    """Turn a /lift/command message into a Pico line, or None if invalid.
+    Accepts 'home', 'park', 'stop', 'info', 'goto <mm> [speed]'
+    or the short forms 'h', 'p', 's', '?', 'g <mm> [speed]'."""
+    words = text.strip().lower().split()
+    if not words:
+        return None
+    short = {'home': 'h', 'park': 'p', 'stop': 's', 'info': '?', 'goto': 'g'}
+    c = short.get(words[0], words[0])
+    if c in ('h', 'p', 's', '?') and len(words) == 1:
+        return f'l {c}'
+    if c == 'g' and 2 <= len(words) <= 3:
+        try:
+            nums = [float(w) for w in words[1:]]
+        except ValueError:
+            return None
+        if any(math.isnan(n) or math.isinf(n) for n in nums):
+            return None
+        if len(nums) == 2 and nums[1] <= 0:
+            return None
+        return 'l g ' + ' '.join(f'{n:.1f}' for n in nums)
+    return None
+
+
+@dataclass
+class FaceMsg:
+    frame: int
+    found: bool
+    cx: int
+    cy: int
+    width: int
+    error_mm: float             # + = face above the target line -> lift UP
+    fps: float
+
+
+def parse_face_line(line: str) -> Optional[FaceMsg]:
+    """'f <frame> <found> <cx> <cy> <w> <err_mm> <fps>' from the ESP32 -> FaceMsg."""
+    parts = line.strip().split()
+    if len(parts) < 8 or parts[0] != 'f':
+        return None
+    try:
+        return FaceMsg(int(parts[1]), parts[2] == '1', int(parts[3]), int(parts[4]),
+                       int(parts[5]), float(parts[6]), float(parts[7]))
+    except ValueError:
+        return None
 
 
 # --------------------------------------------------------------------------

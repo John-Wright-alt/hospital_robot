@@ -1,0 +1,48 @@
+<!--
+  navigate_no_backup.xml  (Phase 7, hospital_robot_nav)
+
+  Nav2's default "navigate to pose with replanning and recovery" tree, with the
+  SPIN and BACK UP recoveries removed:
+    * a patient walks right behind the robot when guiding
+    * the robot has NO rear sensor (LiDAR mast blind sector, ultrasonics face
+      forward/left/right only)
+  So when it gets stuck it only: clears the costmaps, waits 5 s (people step
+  aside), replans and tries again. After 6 failed attempts the goal ABORTS and
+  the mission node / touchscreen offers "Try again / Go back / End".
+
+  Replans the path once per second (RateController 1 Hz) so a person stepping
+  into the corridor makes the robot go around, not into them.
+  Only uses BT nodes that exist in ROS 2 Jazzy's nav2_behavior_tree.
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
+                               error_code_id="{compute_path_error_code}"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"
+                      error_code_id="{follow_path_error_code}"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context"
+                              service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <Sequence name="ClearAndWait">
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+                              service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+                              service_name="global_costmap/clear_entirely_global_costmap"/>
+          <Wait wait_duration="5.0"/>
+        </Sequence>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

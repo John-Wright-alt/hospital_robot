@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!-- =====================================================================
+     ultrasonic.xacro  -  frames for the 3 HC-SR04 sensors (Phase 7)
+
+     Included from robot.urdf.xacro (apply_urdf_patch.py adds one line).
+     The frame names must match pico_bridge's ultrasonic_frames parameter:
+         us_left_link   (US1, GP16/GP17)
+         us_front_link  (US2, GP20/GP21)
+         us_right_link  (US3, GP22/GP26)
+
+     !!! EVERY NUMBER BELOW IS A PLACEHOLDER - MEASURE IT ON THE ROBOT !!!
+     The sensors are on the left, front and right panels, facing left,
+     forward and right (you, 19 Oct 2026). Their exact positions must be
+     measured (guide Stage 2.2); until then Nav2 marks obstacles slightly off.
+
+     How to measure: PHASE7_GUIDE.md Stage 2.2 (from the drive-wheel axle and
+     the outer face of the tyres; base_footprint = the floor point midway
+     between the two drive wheels). x forward, y to the robot's LEFT, z up,
+     yaw: 0 = faces forward, +1.5708 = faces left, -1.5708 = faces right.
+     The x axis of each frame points where the sensor looks (REP 117).
+     ===================================================================== -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- MEASURE every value. Placeholders put the sensors on the chassis faces:
+       in base_footprint your URDF chassis spans x -0.177..+0.177 and
+       y -0.220..+0.192 (base_joint offset), so front face x = 0.177,
+       left face y = 0.192, right face y = -0.220. -->
+  <xacro:property name="us_left_x"    value="0.11"/>
+  <xacro:property name="us_left_y"    value="0.22"/>
+  <xacro:property name="us_left_z"    value="0.105"/>
+  <xacro:property name="us_left_yaw"  value="1.5708"/>
+
+  <xacro:property name="us_front_x"   value="0.184"/>
+  <xacro:property name="us_front_y"   value="-0.084"/>
+  <xacro:property name="us_front_z"   value="0.165"/>
+  <xacro:property name="us_front_yaw" value="0.0"/>
+
+  <xacro:property name="us_right_x"   value="0.11"/>
+  <xacro:property name="us_right_y"   value="-0.22"/>
+  <xacro:property name="us_right_z"   value="0.105"/>
+  <xacro:property name="us_right_yaw" value="-1.5708"/>
+
+  <xacro:macro name="hc_sr04" params="name x y z yaw">
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_footprint"/>
+      <child  link="${name}_link"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 ${yaw}"/>
+    </joint>
+    <link name="${name}_link">
+      <visual>
+        <origin xyz="-0.008 0 0" rpy="0 ${pi/2} 0"/>
+        <geometry><box size="0.02 0.045 0.016"/></geometry>
+        <material name="us_blue"><color rgba="0.1 0.3 0.9 1.0"/></material>
+      </visual>
+    </link>
+  </xacro:macro>
+
+  <xacro:hc_sr04 name="us_left"  x="${us_left_x}"  y="${us_left_y}"  z="${us_left_z}"  yaw="${us_left_yaw}"/>
+  <xacro:hc_sr04 name="us_front" x="${us_front_x}" y="${us_front_y}" z="${us_front_z}" yaw="${us_front_yaw}"/>
+  <xacro:hc_sr04 name="us_right" x="${us_right_x}" y="${us_right_y}" z="${us_right_z}" yaw="${us_right_yaw}"/>
+
+</robot>

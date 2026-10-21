@@ -1,0 +1,16 @@
+# =============================================================================
+# face.yaml  --  settings for hri_face (the animated eyes)
+# Decimal numbers WITH a decimal point (1.0, not 1).
+# =============================================================================
+hri_face:
+  ros__parameters:
+    host: "0.0.0.0"              # "127.0.0.1" = only the robot's own screen can open it
+    port: 8080
+    default_expression: idle     # what the eyes show until /hri/expression says otherwise
+    publish_rate: 20.0           # Hz, updates sent to the page
+
+    gaze_timeout_s: 1.0          # no /hri/gaze/status this long -> eyes go back to neutral
+    max_bearing_deg: 90.0        # bearing that moves the pupils fully to one side
+    mirror: true                 # robot's left = viewer's right. Only change after test 9.2-T2
+    curious_s: 1.5               # length of the "what's that?" reaction to a new object
+    curious_cooldown_s: 4.0      # at most one curious reaction per this many seconds

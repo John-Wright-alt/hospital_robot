@@ -1,0 +1,462 @@
+# =============================================================================
+# nav2_params_real.yaml  --  Nav2 on the REAL robot (Phase 7). ROS 2 Jazzy.
+#
+# Started from YOUR ~/robot_ws/sim_config/nav2_params.yaml (a copy of the
+# Jazzy default), so every plugin name matches your installed Nav2. Changes
+# are marked  # P7  with the reason. Anything not marked = Jazzy default.
+#
+# navigation.launch.py fills in two things at start-up, so you never edit
+# them here:  amcl.initial_pose (from the 'home' waypoint) and the path of
+# bt_navigator's behaviour tree (behavior_trees/navigate_no_backup.xml).
+#
+# Robot facts used (project files, see the guide's status table):
+#   footprint  chassis 0.354 x 0.412 m, base_footprint on the axle centre
+#              (URDF base_joint) -> +/-0.177 x, about -0.22..+0.19 y
+#   speeds     Pico clamps the wheels at 9 rad/s = 0.65 m/s (config.h);
+#              roadmap 7.2 says start at 0.25 m/s
+#   cmd_vel    pico_bridge expects geometry_msgs/TwistStamped (use_stamped:
+#              true) -> enable_stamped_cmd_vel: true on every Nav2 node that
+#              publishes or reads cmd_vel (default is FALSE in Jazzy)
+# =============================================================================
+
+amcl:
+  ros__parameters:
+    set_initial_pose: true          # P7: pose filled in by navigation.launch.py from 'home'
+    initial_pose: {x: 0.0, y: 0.0, z: 0.0, yaw: 0.0}
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    alpha5: 0.2
+    base_frame_id: "base_footprint"
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    global_frame_id: "map"
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_max_range: 12.0           # P7: LD06 is rated 0.02-12 m (was 100)
+    laser_min_range: -1.0
+    laser_model_type: "likelihood_field"
+    max_beams: 60
+    max_particles: 800              # P7: 2000 -> 1500, Pi 4 CPU
+    min_particles: 200              # P7: 500 -> 300, Pi 4 CPU
+    odom_frame_id: "odom"
+    pf_err: 0.05
+    pf_z: 0.99
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    resample_interval: 1
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    save_pose_rate: 0.5
+    sigma_hit: 0.2
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    update_min_a: 0.15              # P7: update a little more often at walking pace
+    update_min_d: 0.20
+    z_hit: 0.5
+    z_max: 0.05
+    z_rand: 0.5
+    z_short: 0.05
+    scan_topic: scan_filtered       # P7: without the robot's own mast (scan_body_filter)
+
+bt_navigator:
+  ros__parameters:
+    global_frame: map
+    robot_base_frame: base_footprint
+    odom_topic: /odom
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    wait_for_service_timeout: 1000
+    action_server_result_timeout: 900.0
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+    # P7: default_nav_to_pose_bt_xml is set by navigation.launch.py to
+    # behavior_trees/navigate_no_backup.xml: same as Nav2's default tree, but the
+    # recoveries never REVERSE or SPIN - a patient is walking right behind the
+    # robot, and it has no rear sensor. It clears the costmaps and waits instead.
+    error_code_names:
+      - compute_path_error_code
+      - follow_path_error_code
+
+controller_server:
+  ros__parameters:
+    enable_stamped_cmd_vel: true    # P7: pico_bridge wants TwistStamped
+    controller_frequency: 10.0      # P7: 20 -> 10 Hz, Pi 4 CPU (plenty at 0.25 m/s)
+    costmap_update_timeout: 0.30
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    progress_checker_plugins: ["progress_checker"]
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+    use_realtime_priority: false
+    speed_limit_topic: "speed_limit"      # the mission node sets guide/alone speed here
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.3       # P7: slow robot
+      movement_time_allowance: 15.0       # P7: allow waiting for people to step aside
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15             # P7: 0.10 -> 0.15 m (odometry + LD06 accuracy)
+      yaw_goal_tolerance: 0.25            # P7: 0.05 -> 0.25 rad (~15 deg)
+    # P7: Regulated Pure Pursuit instead of MPPI. MPPI samples 2000 trajectories
+    # 20x a second - too heavy for a Pi 4 that also runs SLAM/AMCL, speech and
+    # the touchscreen. RPP follows the path at a steady walking speed, slows in
+    # tight spots and near obstacles, and has its own collision check.
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.25            # roadmap 7.2 start value; mission node can lower/raise
+      lookahead_dist: 0.5
+      min_lookahead_dist: 0.3
+      max_lookahead_dist: 0.8
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.6  # see guide: casters + STALL_MIN_CMD
+      transform_tolerance: 0.2
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.6
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.5
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: true
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.10
+      use_fixed_curvature_lookahead: false
+      curvature_lookahead_dist: 0.6
+      use_rotate_to_heading: true
+      allow_reversing: false              # never reverse (no rear sensor, person behind)
+      rotate_to_heading_min_angle: 0.785
+      max_angular_accel: 1.5
+      max_robot_pose_search_dist: 10.0
+      interpolate_curvature_after_goal: false
+      cost_scaling_dist: 0.4
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 4.0  # must equal the inflation layers' value
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_footprint
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      # P7: real rectangular outline instead of robot_radius 0.22 (the chassis
+      # half-diagonal is ~0.27 m, so a 0.22 circle let it clip corners).
+      footprint: "[[0.20, 0.23], [0.20, -0.23], [-0.20, -0.23], [-0.20, 0.23]]"
+      footprint_padding: 0.02
+      # P7: 2-D obstacle layer (cheaper than the voxel layer, one LiDAR plane)
+      #     + the ultrasonic range layer for low obstacles the LiDAR misses.
+      plugins: ["obstacle_layer", "range_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan_filtered
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+          inf_is_valid: False
+      range_layer:
+        plugin: "nav2_costmap_2d::RangeSensorLayer"
+        enabled: True                     # set False to drive without the ultrasonics
+        topics: ["/ultrasonic/left", "/ultrasonic/front", "/ultrasonic/right"]
+        input_sensor_type: "VARIABLE"
+        clear_on_max_reading: True        # "no echo" (= max_range) clears the cone
+        phi: 1.2
+        inflate_cone: 1.0
+        clear_threshold: 0.2
+        mark_threshold: 0.8
+        # If the ultrasonic data stops for 2 s the costmap is marked "not
+        # current" and Nav2 stops the goal: a dead sensor fails SAFE.
+        no_readings_timeout: 2.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.45            # P7: 0.70 -> 0.45 so it still fits through doors
+      always_send_full_costmap: True
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      footprint: "[[0.20, 0.23], [0.20, -0.23], [-0.20, -0.23], [-0.20, 0.23]]"
+      footprint_padding: 0.02
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan_filtered
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.55
+      always_send_full_costmap: True
+
+map_server:
+  ros__parameters:
+    yaml_filename: ""                     # set by navigation.launch.py (map:=...)
+
+map_saver:
+  ros__parameters:
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: True
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0
+    planner_plugins: ["GridBased"]
+    costmap_update_timeout: 1.0
+    GridBased:
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.25                     # P7: 0.5 -> 0.25 m
+      use_astar: true                     # P7: faster on the Pi
+      allow_unknown: false                # P7: never plan through unmapped space
+
+smoother_server:
+  ros__parameters:
+    smoother_plugins: ["simple_smoother"]
+    simple_smoother:
+      plugin: "nav2_smoother::SimpleSmoother"
+      tolerance: 1.0e-10
+      max_its: 1000
+      do_refinement: True
+
+behavior_server:
+  ros__parameters:
+    enable_stamped_cmd_vel: true          # P7
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
+    spin:
+      plugin: "nav2_behaviors::Spin"
+    backup:
+      plugin: "nav2_behaviors::BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors::DriveOnHeading"
+    wait:
+      plugin: "nav2_behaviors::Wait"
+    assisted_teleop:
+      plugin: "nav2_behaviors::AssistedTeleop"
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.1
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 0.6               # P7: 1.0 -> 0.6
+    min_rotational_vel: 0.3               # P7: 0.4 -> 0.3
+    rotational_acc_lim: 1.5               # P7: 3.2 -> 1.5
+
+waypoint_follower:
+  ros__parameters:
+    loop_rate: 20
+    stop_on_failure: false
+    action_server_result_timeout: 900.0
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: True
+      waypoint_pause_duration: 200
+
+route_server:
+  ros__parameters:
+    boundary_radius_to_achieve_node: 1.0
+    radius_to_achieve_node: 2.0
+    smooth_corners: true
+    operations: ["AdjustSpeedLimit", "ReroutingService"]
+    ReroutingService:
+      plugin: "nav2_route::ReroutingService"
+    AdjustSpeedLimit:
+      plugin: "nav2_route::AdjustSpeedLimit"
+    CollisionMonitor:
+      plugin: "nav2_route::CollisionMonitor"
+      max_collision_dist: 3.0
+    edge_cost_functions: ["DistanceScorer", "CostmapScorer"]
+    DistanceScorer:
+      plugin: "nav2_route::DistanceScorer"
+    CostmapScorer:
+      plugin: "nav2_route::CostmapScorer"
+
+# P7: hard ceiling on what reaches the robot, whatever the controller asks.
+# The Pico ramps at 0.5 m/s^2 up / 1.0 m/s^2 down (config.h); keep below it.
+velocity_smoother:
+  ros__parameters:
+    enable_stamped_cmd_vel: true          # P7
+    smoothing_frequency: 20.0
+    stamp_smoothed_velocity_with_smoothing_time: False
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.35, 0.0, 0.8]        # P7: 0.5 -> 0.35 m/s, 2.0 -> 0.8 rad/s
+    min_velocity: [-0.05, 0.0, -0.8]      # P7: practically no reversing
+    max_accel: [0.4, 0.0, 1.2]            # P7
+    max_decel: [-0.8, 0.0, -1.5]          # P7
+    odom_topic: "odom"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+# P7: independent safety layer between Nav2 and the robot (roadmap 7.2).
+# It does NOT use the costmaps: it looks at the raw sensors 20x a second.
+#   PolygonStop  - anything in the 12 cm strip in front of the bumper: stop
+#   PolygonSlow  - anything within 40 cm in front: 40 % speed
+# Both strips start at the front edge (x = 0.20 m), so the robot's own body,
+# mast and sensors are never inside them.
+collision_monitor:
+  ros__parameters:
+    enable_stamped_cmd_vel: true          # P7
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel"          # -> pico_bridge
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
+      type: "polygon"
+      points: "[[0.32, 0.24], [0.32, -0.24], [0.20, -0.24], [0.20, 0.24]]"
+      action_type: "stop"
+      min_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_stop"
+      enabled: True
+    PolygonSlow:
+      type: "polygon"
+      points: "[[0.60, 0.30], [0.60, -0.30], [0.20, -0.30], [0.20, 0.30]]"
+      action_type: "slowdown"
+      slowdown_ratio: 0.4
+      min_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_slowdown"
+      enabled: True
+    observation_sources: ["scan", "us_left", "us_front", "us_right"]
+    scan:
+      type: "scan"
+      topic: "scan_filtered"
+      min_height: 0.0
+      max_height: 2.0
+      enabled: True
+    us_left:                              # set enabled: False on all three to drive
+      type: "range"                       # without the ultrasonics
+      topic: "/ultrasonic/left"
+      obstacles_angle: 0.05
+      enabled: True
+    us_front:
+      type: "range"
+      topic: "/ultrasonic/front"
+      obstacles_angle: 0.05
+      enabled: True
+    us_right:
+      type: "range"
+      topic: "/ultrasonic/right"
+      obstacles_angle: 0.05
+      enabled: True
+
+docking_server:
+  ros__parameters:
+    enable_stamped_cmd_vel: true          # P7: keep every cmd_vel publisher the same type
+    controller_frequency: 50.0
+    initial_perception_timeout: 5.0
+    wait_charge_timeout: 5.0
+    dock_approach_timeout: 30.0
+    undock_linear_tolerance: 0.05
+    undock_angular_tolerance: 0.1
+    max_retries: 3
+    base_frame: "base_link"
+    fixed_frame: "odom"
+    dock_backwards: false
+    dock_prestaging_tolerance: 0.5
+    dock_plugins: ['simple_charging_dock']
+    simple_charging_dock:
+      plugin: 'opennav_docking::SimpleChargingDock'
+      docking_threshold: 0.05
+      staging_x_offset: -0.7
+      use_external_detection_pose: true
+      use_battery_status: false
+      use_stall_detection: false
+      external_detection_timeout: 1.0
+      external_detection_translation_x: -0.18
+      external_detection_translation_y: 0.0
+      external_detection_rotation_roll: -1.57
+      external_detection_rotation_pitch: -1.57
+      external_detection_rotation_yaw: 0.0
+      filter_coef: 0.1
+    controller:
+      k_phi: 3.0
+      k_delta: 2.0
+      v_linear_min: 0.15
+      v_linear_max: 0.15
+      use_collision_detection: true
+      costmap_topic: "local_costmap/costmap_raw"
+      footprint_topic: "local_costmap/published_footprint"
+      transform_tolerance: 0.1
+      projection_time: 5.0
+      simulation_step: 0.1
+      dock_collision_threshold: 0.3
+
+loopback_simulator:
+  ros__parameters:
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+    scan_frame_id: "base_scan"
+    update_duration: 0.02
+    scan_range_min: 0.05
+    scan_range_max: 30.0
+    scan_angle_min: -3.1415
+    scan_angle_max: 3.1415
+    scan_angle_increment: 0.02617
+    scan_use_inf: true
+
+# Fix 20 Oct: a busy Pi missed the 4 s heartbeat ("bond"), Nav2 reset itself
+# and the container crashed while starting up again. 0.0 = no heartbeat check.
+lifecycle_manager_navigation:
+  ros__parameters:
+    bond_timeout: 0.0
+    attempt_respawn_reconnection: false
+
+lifecycle_manager_localization:
+  ros__parameters:
+    bond_timeout: 0.0
+    attempt_respawn_reconnection: false
