@@ -1,0 +1,26 @@
+frame_id: map
+waypoints:
+  home:
+    x: 0.035
+    y: 0.071
+    yaw_deg: 9.3
+    label: Front door
+    saved: 2026-10-20 09:01
+  xray:
+    x: 12.647
+    y: -2.907
+    yaw_deg: -85.4
+    label: Bathroom door
+    saved: 2026-10-20 09:11
+  pharmacy:
+    x: -3.554
+    y: -7.568
+    yaw_deg: -0.2
+    label: Kitchen
+    saved: 2026-10-20 09:17
+  doctor:
+    x: -5.706
+    y: 1.9
+    yaw_deg: -172.5
+    label: Bedroom door
+    saved: 2026-10-20 09:20

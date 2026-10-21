@@ -83,6 +83,7 @@ def _setup(context):
     params = build_params(os.path.expanduser(get('params_file')),
                           os.path.join(share, 'behavior_trees', 'navigate_no_backup.xml'),
                           home, use_us)
+    params.setdefault('map_server', {}).setdefault('ros__parameters', {})['yaml_filename'] = map_yaml
     with open(RUNTIME_PARAMS, 'w') as f:
         yaml.safe_dump(params, f, sort_keys=False)
 

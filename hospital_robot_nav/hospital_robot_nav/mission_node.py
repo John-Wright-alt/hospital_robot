@@ -89,9 +89,7 @@ class MissionNode(Node):
                 self.get_logger().info(str(value))
             elif kind == 'status':
                 self.status_pub.publish(String(data=json.dumps(value)))
-                lvl = self.get_logger().warn if value['state'] == 'FAILED' else \
-                    self.get_logger().info
-                lvl(f'status: {value["state"]} {value["target"]} ({value["mode"]})'
+                self.get_logger().info(f'status: {value["state"]} {value["target"]} ({value["mode"]})'
                     + (f' - {value["reason"]}' if value['reason'] else ''))
             elif kind == 'speed':
                 self.speed = float(value)
@@ -123,7 +121,7 @@ class MissionNode(Node):
         goal = NavigateToPose.Goal()
         pose = PoseStamped()
         pose.header.frame_id = 'map'
-        pose.header.stamp = self.get_clock().now().to_msg()
+        # stamp 0 = 'use the latest transform' (no extrapolation errors)
         pose.pose.position.x = float(g['x'])
         pose.pose.position.y = float(g['y'])
         pose.pose.orientation.z = math.sin(g['yaw'] / 2.0)

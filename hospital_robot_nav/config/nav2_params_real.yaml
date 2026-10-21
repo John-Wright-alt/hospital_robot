@@ -40,8 +40,8 @@ amcl:
     laser_min_range: -1.0
     laser_model_type: "likelihood_field"
     max_beams: 60
-    max_particles: 1500             # P7: 2000 -> 1500, Pi 4 CPU
-    min_particles: 300              # P7: 500 -> 300, Pi 4 CPU
+    max_particles: 800              # P7: 2000 -> 1500, Pi 4 CPU
+    min_particles: 200              # P7: 500 -> 300, Pi 4 CPU
     odom_frame_id: "odom"
     pf_err: 0.05
     pf_z: 0.99
@@ -302,7 +302,7 @@ route_server:
     boundary_radius_to_achieve_node: 1.0
     radius_to_achieve_node: 2.0
     smooth_corners: true
-    operations: ["AdjustSpeedLimit", "ReroutingService", "CollisionMonitor"]
+    operations: ["AdjustSpeedLimit", "ReroutingService"]
     ReroutingService:
       plugin: "nav2_route::ReroutingService"
     AdjustSpeedLimit:
@@ -448,3 +448,15 @@ loopback_simulator:
     scan_angle_max: 3.1415
     scan_angle_increment: 0.02617
     scan_use_inf: true
+
+# Fix 20 Oct: a busy Pi missed the 4 s heartbeat ("bond"), Nav2 reset itself
+# and the container crashed while starting up again. 0.0 = no heartbeat check.
+lifecycle_manager_navigation:
+  ros__parameters:
+    bond_timeout: 0.0
+    attempt_respawn_reconnection: false
+
+lifecycle_manager_localization:
+  ros__parameters:
+    bond_timeout: 0.0
+    attempt_respawn_reconnection: false
